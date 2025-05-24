@@ -7,11 +7,11 @@ import (
     "github.com/gin-gonic/gin"
     "golang.org/x/crypto/bcrypt"
     "go.mongodb.org/mongo-driver/bson"
+    "go.mongodb.org/mongo-driver/mongo/options"
 
     "photoquest/config"
     "photoquest/models"
     "photoquest/utils"
-
 )
 
 // SignUp
@@ -33,7 +33,6 @@ func SignUp(c *gin.Context) {
     usersCollection := config.DB.Collection("users")
     otpsCollection := config.DB.Collection("otps")
 
-    // Check if user already exists
     var existingUser models.User
     err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&existingUser)
     if err == nil {
@@ -61,9 +60,7 @@ func SignUp(c *gin.Context) {
         Code:  otp,
     })
 
-    // Send OTP here
     utils.SendEmail(req.Email, otp)
-
     c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
@@ -92,8 +89,12 @@ func VerifyOTP(c *gin.Context) {
         bson.M{"email": req.Email},
         bson.M{"$set": bson.M{"verified": true}},
     )
-    otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Failed to update user status"})
+        return
+    }
 
+    _, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
     c.JSON(200, gin.H{"message": "Email verified"})
 }
 
@@ -148,11 +149,15 @@ func ForgotPassword(c *gin.Context) {
     }
 
     otp := utils.GenerateOTP()
-    otpsCollection.UpdateOne(ctx,
+    _, err = otpsCollection.UpdateOne(ctx,
         bson.M{"email": req.Email},
         bson.M{"$set": bson.M{"code": otp}},
         options.Update().SetUpsert(true),
     )
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Failed to save OTP"})
+        return
+    }
 
     utils.SendEmail(req.Email, otp)
     c.JSON(200, gin.H{"message": "OTP sent to email"})
@@ -185,7 +190,11 @@ func ResetPassword(c *gin.Context) {
         bson.M{"email": req.Email},
         bson.M{"$set": bson.M{"password": string(hashed)}},
     )
-    otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Failed to update password"})
+        return
+    }
 
+    _, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
     c.JSON(200, gin.H{"message": "Password reset successful"})
 }
