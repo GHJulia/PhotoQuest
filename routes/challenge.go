@@ -11,5 +11,6 @@ func ChallengeRoutes(r *gin.Engine) {
         group.GET("/roll", controllers.RollChallenge)
         group.POST("/accept", controllers.AcceptChallenge)
         group.POST("/skip", controllers.SkipChallenge)
+		group.GET("/upload", controllers.UploadPhotoRedirect)
     }
 }

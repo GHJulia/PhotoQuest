@@ -3,6 +3,7 @@ package controllers
 import (
     "context"
     "math/rand"
+	"net/http"
     "time"
 
     "github.com/gin-gonic/gin"
@@ -95,4 +96,20 @@ func SkipChallenge(c *gin.Context) {
     }
 
     c.JSON(200, gin.H{"message": "Challenge skipped"})
+}
+
+// Upload Photo
+func UploadPhotoRedirect(c *gin.Context) {
+    email := c.Query("email")
+    prompt := c.Query("prompt")
+    mode := c.Query("mode")
+
+    if email == "" || prompt == "" || mode == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing upload info"})
+        return
+    }
+
+    // example redirect to frontend upload page
+    url := "/upload-photo?email=" + email + "&prompt=" + prompt + "&mode=" + mode
+    c.Redirect(http.StatusFound, url)
 }
