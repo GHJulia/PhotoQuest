@@ -1,11 +1,17 @@
 package controllers
 
 import (
+    "context"
+    "time"
+
     "github.com/gin-gonic/gin"
-    "photoquest/database"
-    "photoquest/models"
     "golang.org/x/crypto/bcrypt"
+    "go.mongodb.org/mongo-driver/bson"
+
+    "photoquest/config"
+    "photoquest/models"
     "photoquest/utils"
+
 )
 
 // SignUp
@@ -15,30 +21,50 @@ func SignUp(c *gin.Context) {
         Email    string `json:"email"`
         Password string `json:"password"`
     }
+
     if err := c.BindJSON(&req); err != nil {
         c.JSON(400, gin.H{"error": "Invalid input"})
         return
     }
 
-    if _, exists := database.Users[req.Email]; exists {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    usersCollection := config.DB.Collection("users")
+    otpsCollection := config.DB.Collection("otps")
+
+    // Check if user already exists
+    var existingUser models.User
+    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&existingUser)
+    if err == nil {
         c.JSON(400, gin.H{"error": "Email already exists"})
         return
     }
 
     hashed, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-    user := models.User{
+    newUser := models.User{
         Name:     req.Name,
         Email:    req.Email,
         Password: string(hashed),
         Verified: false,
     }
 
-    database.Users[req.Email] = user
+    _, err = usersCollection.InsertOne(ctx, newUser)
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Failed to create user"})
+        return
+    }
 
     otp := utils.GenerateOTP()
-    database.OTPs[req.Email] = otp
+    _, _ = otpsCollection.InsertOne(ctx, models.OTP{
+        Email: req.Email,
+        Code:  otp,
+    })
 
-    c.JSON(200, gin.H{"message": "OTP sent to email", "otp": otp})
+    // Send OTP here
+    utils.SendEmail(req.Email, otp)
+
+    c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Verify OTP
@@ -49,17 +75,26 @@ func VerifyOTP(c *gin.Context) {
     }
     c.BindJSON(&req)
 
-    if code, ok := database.OTPs[req.Email]; ok && code == req.Code {
-        user := database.Users[req.Email]
-        user.Verified = true
-        database.Users[req.Email] = user
-        delete(database.OTPs, req.Email)
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
 
-        c.JSON(200, gin.H{"message": "Email verified"})
+    otpsCollection := config.DB.Collection("otps")
+    usersCollection := config.DB.Collection("users")
+
+    var otp models.OTP
+    err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
+    if err != nil || otp.Code != req.Code {
+        c.JSON(400, gin.H{"error": "Invalid OTP"})
         return
     }
 
-    c.JSON(400, gin.H{"error": "Invalid OTP"})
+    _, err = usersCollection.UpdateOne(ctx,
+        bson.M{"email": req.Email},
+        bson.M{"$set": bson.M{"verified": true}},
+    )
+    otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
+
+    c.JSON(200, gin.H{"message": "Email verified"})
 }
 
 // Login
@@ -70,19 +105,26 @@ func Login(c *gin.Context) {
     }
     c.BindJSON(&req)
 
-    user, ok := database.Users[req.Email]
-    if !ok || !user.Verified {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    usersCollection := config.DB.Collection("users")
+
+    var user models.User
+    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&user)
+    if err != nil || !user.Verified {
         c.JSON(401, gin.H{"error": "User not found or not verified"})
         return
     }
 
-    err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
+    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
     if err != nil {
         c.JSON(401, gin.H{"error": "Wrong password"})
         return
     }
 
-    c.JSON(200, gin.H{"message": "Login successful"})
+    token, _ := utils.GenerateJWT(user.Email)
+    c.JSON(200, gin.H{"message": "Login successful", "token": token})
 }
 
 // Forgot Password (Send OTP)
@@ -92,15 +134,28 @@ func ForgotPassword(c *gin.Context) {
     }
     c.BindJSON(&req)
 
-    if _, ok := database.Users[req.Email]; !ok {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    usersCollection := config.DB.Collection("users")
+    otpsCollection := config.DB.Collection("otps")
+
+    var user models.User
+    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&user)
+    if err != nil {
         c.JSON(404, gin.H{"error": "Email not found"})
         return
     }
 
     otp := utils.GenerateOTP()
-    database.OTPs[req.Email] = otp
+    otpsCollection.UpdateOne(ctx,
+        bson.M{"email": req.Email},
+        bson.M{"$set": bson.M{"code": otp}},
+        options.Update().SetUpsert(true),
+    )
 
-    c.JSON(200, gin.H{"message": "OTP sent", "otp": otp})
+    utils.SendEmail(req.Email, otp)
+    c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Reset Password
@@ -112,17 +167,25 @@ func ResetPassword(c *gin.Context) {
     }
     c.BindJSON(&req)
 
-    if database.OTPs[req.Email] != req.Code {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    otpsCollection := config.DB.Collection("otps")
+    usersCollection := config.DB.Collection("users")
+
+    var otp models.OTP
+    err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
+    if err != nil || otp.Code != req.Code {
         c.JSON(400, gin.H{"error": "Invalid OTP"})
         return
     }
 
     hashed, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-    user := database.Users[req.Email]
-    user.Password = string(hashed)
-    database.Users[req.Email] = user
-
-    delete(database.OTPs, req.Email)
+    _, err = usersCollection.UpdateOne(ctx,
+        bson.M{"email": req.Email},
+        bson.M{"$set": bson.M{"password": string(hashed)}},
+    )
+    otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
 
     c.JSON(200, gin.H{"message": "Password reset successful"})
 }
