@@ -3,8 +3,9 @@ package controllers
 import (
     "context"
     "math/rand"
-	"net/http"
     "time"
+    "fmt"
+    "strings"
 
     "github.com/gin-gonic/gin"
     "go.mongodb.org/mongo-driver/bson"
@@ -12,7 +13,6 @@ import (
     "photoquest/models"
 )
 
-// Random the Challenge
 func RollChallenge(c *gin.Context) {
     mode := c.Query("mode") // easy, medium, hard
     email := c.Query("email")
@@ -27,14 +27,17 @@ func RollChallenge(c *gin.Context) {
     defer cancel()
 
     uc := config.DB.Collection("user_challenges")
-    count, _ := uc.CountDocuments(ctx, bson.M{"email": email, "date": today})
+    count, _ := uc.CountDocuments(ctx, bson.M{
+        "email":  email,
+        "date":   today,
+        "status": bson.M{"$in": []string{"rolled", "accepted", "skipped"}},
+    })
 
     if count >= 5 {
         c.JSON(403, gin.H{"error": "Daily challenge limit reached"})
         return
     }
 
-    // get all prompts for that mode
     challengesCol := config.DB.Collection("challenges")
     cursor, err := challengesCol.Find(ctx, bson.M{"mode": mode})
     if err != nil {
@@ -48,11 +51,20 @@ func RollChallenge(c *gin.Context) {
         return
     }
 
-    // pick one randomly
     picked := challenges[rand.Intn(len(challenges))]
+
+    // Record that it was rolled
+    _, _ = uc.InsertOne(ctx, models.UserChallenge{
+        Email:  email,
+        Date:   today,
+        Prompt: picked.Prompt,
+        Mode:   picked.Mode,
+        Status: "rolled",
+    })
 
     c.JSON(200, picked)
 }
+
 
 // Accept the Challenge
 func AcceptChallenge(c *gin.Context) {
@@ -61,55 +73,40 @@ func AcceptChallenge(c *gin.Context) {
         c.JSON(400, gin.H{"error": "Invalid input"})
         return
     }
+    req.Email = strings.ToLower(req.Email)
     req.Date = time.Now().Format("2006-01-02")
     req.Status = "accepted"
+
+     fmt.Printf("📝 Saving Challenge: %+v\n", req) // Add this
 
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
 
-    _, err := config.DB.Collection("user_challenges").InsertOne(ctx, req)
+    userChallenges := config.DB.Collection("user_challenges")
+	 filter := bson.M{
+        "email":  req.Email,
+        "date":   req.Date,
+        "status": "accepted",
+    }
+
+    fmt.Printf("🔍 Filter: %+v\n", filter)
+    count, err := userChallenges.CountDocuments(ctx, filter)
     if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to save challenge"})
+        c.JSON(500, gin.H{"error": "Database error", "detail": err.Error()})
+        return
+    }
+
+    fmt.Printf("📊 Accepted today: %d\n", count)
+    if count >= 5 {
+        c.JSON(403, gin.H{"error": "You’ve already accepted 5 challenges today"})
+        return
+    }
+
+    _, err = userChallenges.InsertOne(ctx, req)
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Failed to save challenge", "detail": err.Error()})
         return
     }
 
     c.JSON(200, gin.H{"message": "Challenge accepted"})
-}
-
-// Skip the Challenge
-func SkipChallenge(c *gin.Context) {
-    var req models.UserChallenge
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid input"})
-        return
-    }
-    req.Date = time.Now().Format("2006-01-02")
-    req.Status = "skipped"
-
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-
-    _, err := config.DB.Collection("user_challenges").InsertOne(ctx, req)
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to save skipped challenge"})
-        return
-    }
-
-    c.JSON(200, gin.H{"message": "Challenge skipped"})
-}
-
-// Upload Photo
-func UploadPhotoRedirect(c *gin.Context) {
-    email := c.Query("email")
-    prompt := c.Query("prompt")
-    mode := c.Query("mode")
-
-    if email == "" || prompt == "" || mode == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing upload info"})
-        return
-    }
-
-    // example redirect to frontend upload page
-    url := "/upload-photo?email=" + email + "&prompt=" + prompt + "&mode=" + mode
-    c.Redirect(http.StatusFound, url)
 }
