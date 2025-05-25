@@ -1,112 +1,102 @@
 package controllers
 
 import (
-    "context"
-    "math/rand"
-    "time"
-    "fmt"
-    "strings"
+	"context"
+	"math/rand"
+	"strings"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "go.mongodb.org/mongo-driver/bson"
-    "photoquest/config"
-    "photoquest/models"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"photoquest/config"
+	"photoquest/models"
 )
 
+// GET /challenge/roll?mode=easy
 func RollChallenge(c *gin.Context) {
-    mode := c.Query("mode") // easy, medium, hard
-    email := c.Query("email")
+	mode := c.Query("mode")
+	if mode == "" {
+		c.JSON(400, gin.H{"error": "Missing mode"})
+		return
+	}
 
-    if mode == "" || email == "" {
-        c.JSON(400, gin.H{"error": "Missing mode or email"})
-        return
-    }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    today := time.Now().Format("2006-01-02")
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	// Fetch all challenges in the given mode
+	challengesCol := config.DB.Collection("challenges")
+	cursor, err := challengesCol.Find(ctx, bson.M{"mode": mode})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to fetch challenges"})
+		return
+	}
 
-    uc := config.DB.Collection("user_challenges")
-    count, _ := uc.CountDocuments(ctx, bson.M{
-        "email":  email,
-        "date":   today,
-        "status": bson.M{"$in": []string{"rolled", "accepted", "skipped"}},
-    })
+	var challenges []models.Challenge
+	if err := cursor.All(ctx, &challenges); err != nil || len(challenges) == 0 {
+		c.JSON(500, gin.H{"error": "No challenges available"})
+		return
+	}
 
-    if count >= 5 {
-        c.JSON(403, gin.H{"error": "Daily challenge limit reached"})
-        return
-    }
-
-    challengesCol := config.DB.Collection("challenges")
-    cursor, err := challengesCol.Find(ctx, bson.M{"mode": mode})
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to fetch prompts"})
-        return
-    }
-
-    var challenges []models.Challenge
-    if err := cursor.All(ctx, &challenges); err != nil || len(challenges) == 0 {
-        c.JSON(500, gin.H{"error": "No prompts available"})
-        return
-    }
-
-    picked := challenges[rand.Intn(len(challenges))]
-
-    // Record that it was rolled
-    _, _ = uc.InsertOne(ctx, models.UserChallenge{
-        Email:  email,
-        Date:   today,
-        Prompt: picked.Prompt,
-        Mode:   picked.Mode,
-        Status: "rolled",
-    })
-
-    c.JSON(200, picked)
+	random := challenges[rand.Intn(len(challenges))]
+	c.JSON(200, random)
 }
 
-
-// Accept the Challenge
+// POST /challenge/accept
 func AcceptChallenge(c *gin.Context) {
-    var req models.UserChallenge
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid input"})
-        return
-    }
-    req.Email = strings.ToLower(req.Email)
-    req.Date = time.Now().Format("2006-01-02")
-    req.Status = "accepted"
+	var req models.UserChallenge
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid input"})
+		return
+	}
 
-     fmt.Printf("📝 Saving Challenge: %+v\n", req) // Add this
+	// Normalize
+	req.Email = strings.ToLower(req.Email)
+	req.Date = time.Now().Format("2006-01-02")
+	req.Status = "accepted"
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    userChallenges := config.DB.Collection("user_challenges")
-	 filter := bson.M{
-        "email":  req.Email,
-        "date":   req.Date,
-        "status": "accepted",
-    }
+	userChallenges := config.DB.Collection("user_challenges")
 
-    fmt.Printf("🔍 Filter: %+v\n", filter)
-    count, err := userChallenges.CountDocuments(ctx, filter)
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Database error", "detail": err.Error()})
-        return
-    }
+	// ❗ Check for existing challenge with the same prompt today
+	duplicateFilter := bson.M{
+		"email":  req.Email,
+		"date":   req.Date,
+		"prompt": req.Prompt,
+	}
+	dupCount, err := userChallenges.CountDocuments(ctx, duplicateFilter)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Database error"})
+		return
+	}
+	if dupCount > 0 {
+		c.JSON(409, gin.H{"error": "You already accepted this challenge today"})
+		return
+	}
 
-    fmt.Printf("📊 Accepted today: %d\n", count)
-    if count >= 5 {
-        c.JSON(403, gin.H{"error": "You’ve already accepted 5 challenges today"})
-        return
-    }
+	// ❗ Check if user has accepted more than 5 challenges today
+	limitFilter := bson.M{
+		"email":  req.Email,
+		"date":   req.Date,
+		"status": "accepted",
+	}
+	count, err := userChallenges.CountDocuments(ctx, limitFilter)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Database error"})
+		return
+	}
+	if count >= 5 {
+		c.JSON(403, gin.H{"error": "You’ve already accepted 5 challenges today"})
+		return
+	}
 
-    _, err = userChallenges.InsertOne(ctx, req)
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to save challenge", "detail": err.Error()})
-        return
-    }
+	// Insert new challenge
+	_, err = userChallenges.InsertOne(ctx, req)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to save challenge"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "Challenge accepted"})
+	c.JSON(200, gin.H{"message": "Challenge accepted"})
 }
