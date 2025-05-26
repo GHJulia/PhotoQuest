@@ -118,6 +118,14 @@ func UploadCustomChallenge(c *gin.Context) {
 		c.PostForm("choice4"),
 	}
 
+    // ❗ Validate choices (must not be empty)
+	for i, choice := range choices {
+		if strings.TrimSpace(choice) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("choice%d is required", i+1)})
+			return
+		}
+	}
+
 	// Get uploaded file
 	header, err := c.FormFile("photo")
 	if err != nil {
