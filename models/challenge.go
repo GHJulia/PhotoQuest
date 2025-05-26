@@ -12,3 +12,11 @@ type UserChallenge struct {
     Mode   string `bson:"mode" json:"mode"`
     Status string `bson:"status" json:"status"` // accepted, skipped
 }
+
+type CustomChallenge struct {
+    Email        string   `bson:"email" json:"email"`
+    ImageURL     string   `bson:"image_url" json:"image_url"`
+    Choices      []string `bson:"choices" json:"choices"`
+    CorrectIndex int      `bson:"correct_index" json:"correct_index"` // 0-3
+    CreatedAt    string   `bson:"created_at" json:"created_at"`
+}

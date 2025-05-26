@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+    "fmt"
+    "net/http"
 	"math/rand"
 	"strings"
 	"time"
@@ -10,8 +12,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"photoquest/config"
 	"photoquest/models"
+    "photoquest/utils"
 )
 
+// RollChallenge
 // GET /challenge/roll?mode=easy
 func RollChallenge(c *gin.Context) {
 	mode := c.Query("mode")
@@ -41,6 +45,7 @@ func RollChallenge(c *gin.Context) {
 	c.JSON(200, random)
 }
 
+// AcceptChallenge
 // POST /challenge/accept
 func AcceptChallenge(c *gin.Context) {
 	var req models.UserChallenge
@@ -99,4 +104,61 @@ func AcceptChallenge(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "Challenge accepted"})
+}
+
+// UploadCustomChallenge
+// POST /challenge/upload
+func UploadCustomChallenge(c *gin.Context) {
+	email := c.PostForm("email")
+	correctIndex := c.PostForm("correct_index")
+	choices := []string{
+		c.PostForm("choice1"),
+		c.PostForm("choice2"),
+		c.PostForm("choice3"),
+		c.PostForm("choice4"),
+	}
+
+	// Get uploaded file
+	header, err := c.FormFile("photo")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read uploaded photo"})
+		return
+	}
+	src, _ := header.Open()
+	defer src.Close()
+
+	// Upload to S3
+	imageURL, err := utils.UploadToS3(src, header)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload to S3", "detail": err.Error()})
+		return
+	}
+
+	// Validate correct_index
+	var correctIdx int
+	fmt.Sscanf(correctIndex, "%d", &correctIdx)
+	if correctIdx < 0 || correctIdx > 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid correct_index"})
+		return
+	}
+
+	// Create custom challenge document
+	challenge := models.CustomChallenge{
+		Email:        strings.ToLower(email),
+		ImageURL:     imageURL,
+		Choices:      choices,
+		CorrectIndex: correctIdx,
+		CreatedAt:    time.Now().Format(time.RFC3339),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = config.DB.Collection("custom_challenges").InsertOne(ctx, challenge)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database insert failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Custom challenge uploaded successfully"})
 }

@@ -10,5 +10,6 @@ func ChallengeRoutes(r *gin.Engine) {
     {
         group.GET("/roll", controllers.RollChallenge)
         group.POST("/accept", controllers.AcceptChallenge)
+        group.POST("/upload", controllers.UploadCustomChallenge)
     }
 }
