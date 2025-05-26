@@ -11,7 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	//s3types 
+	// "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 func UploadToS3(file multipart.File, fileHeader *multipart.FileHeader) (string, error) {
@@ -36,7 +37,7 @@ func UploadToS3(file multipart.File, fileHeader *multipart.FileHeader) (string, 
 		Key:         aws.String(filename),
 		Body:        file,
 		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
-		ACL:         s3types.ObjectCannedACLPublicRead,
+		// ACL:         s3types.ObjectCannedACLPublicRead,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to upload to S3: %v", err)
