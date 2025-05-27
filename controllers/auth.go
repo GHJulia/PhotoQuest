@@ -14,54 +14,71 @@ import (
     "photoquest/utils"
 )
 
-// SignUp
+// Sign Up
 func SignUp(c *gin.Context) {
-    var req struct {
-        Name     string `json:"name"`
-        Email    string `json:"email"`
-        Password string `json:"password"`
-    }
+	name := c.PostForm("name")
+	email := c.PostForm("email")
+	password := c.PostForm("password")
 
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid input"})
-        return
-    }
+	// Validate input
+	if name == "" || email == "" || password == "" {
+		c.JSON(400, gin.H{"error": "Missing required fields"})
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	// Check for existing user
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	usersCollection := config.DB.Collection("users")
 
-    usersCollection := config.DB.Collection("users")
-    otpsCollection := config.DB.Collection("otps")
+	var existingUser models.User
+	err := usersCollection.FindOne(ctx, bson.M{"email": email}).Decode(&existingUser)
+	if err == nil {
+		c.JSON(400, gin.H{"error": "Email already exists"})
+		return
+	}
 
-    var existingUser models.User
-    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&existingUser)
-    if err == nil {
-        c.JSON(400, gin.H{"error": "Email already exists"})
-        return
-    }
+	// Hash password
+	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-    hashed, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-    newUser := models.User{
-        Name:     req.Name,
-        Email:    req.Email,
-        Password: string(hashed),
-        Verified: false,
-    }
+	// Handle avatar upload
+	var avatarURL string
+	fileHeader, err := c.FormFile("avatar")
+	if err == nil {
+		src, _ := fileHeader.Open()
+		defer src.Close()
+		avatarURL, err = utils.UploadToS3(src, fileHeader)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to upload avatar", "detail": err.Error()})
+			return
+		}
+	} else {
+		avatarURL = "https://your-default-avatar-url.com/default.png"
+	}
 
-    _, err = usersCollection.InsertOne(ctx, newUser)
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to create user"})
-        return
-    }
+	// Insert new user
+	newUser := models.User{
+		Name:     name,
+		Email:    email,
+		Password: string(hashed),
+		Avatar:   avatarURL,
+		Verified: false,
+	}
+	_, err = usersCollection.InsertOne(ctx, newUser)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to create user"})
+		return
+	}
 
-    otp := utils.GenerateOTP()
-    _, _ = otpsCollection.InsertOne(ctx, models.OTP{
-        Email: req.Email,
-        Code:  otp,
-    })
+	// Send OTP
+	otp := utils.GenerateOTP()
+	_, _ = config.DB.Collection("otps").InsertOne(ctx, models.OTP{
+		Email: email,
+		Code:  otp,
+	})
+	utils.SendEmail(email, otp)
 
-    utils.SendEmail(req.Email, otp)
-    c.JSON(200, gin.H{"message": "OTP sent to email"})
+	c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Verify OTP
@@ -124,7 +141,7 @@ func Login(c *gin.Context) {
         return
     }
 
-    token, _ := utils.GenerateJWT(user.Email)
+    token, _ := utils.GenerateJWT(user.ID.Hex(), user.Name, user.Avatar)
     c.JSON(200, gin.H{"message": "Login successful", "token": token})
 }
 

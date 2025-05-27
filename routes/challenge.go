@@ -5,11 +5,11 @@ import (
     "photoquest/controllers"
 )
 
-func ChallengeRoutes(r *gin.Engine) {
-    group := r.Group("/challenge")
+func ChallengeRoutes(rg *gin.RouterGroup) {
+    r := rg.Group("/challenge")
     {
-        group.GET("/roll", controllers.RollChallenge)
-        group.POST("/accept", controllers.AcceptChallenge)
-        group.POST("/upload", controllers.UploadCustomChallenge)
+        r.GET("/roll", controllers.RollChallenge)
+        r.POST("/accept", controllers.AcceptChallenge)
+        r.POST("/upload", controllers.UploadCustomChallenge)
     }
 }

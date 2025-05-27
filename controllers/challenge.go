@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"photoquest/config"
 	"photoquest/models"
     "photoquest/utils"
@@ -109,6 +110,29 @@ func AcceptChallenge(c *gin.Context) {
 // UploadCustomChallenge
 // POST /challenge/upload
 func UploadCustomChallenge(c *gin.Context) {
+	// Extract user claims from JWT (set by middleware)
+	claims, exists := c.Get("claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userClaims := claims.(map[string]interface{})
+
+	userIDHex, ok := userClaims["user_id"].(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user_id"})
+		return
+	}
+	userID, err := primitive.ObjectIDFromHex(userIDHex)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ObjectID"})
+		return
+	}
+
+	username := userClaims["username"].(string)
+	avatar := userClaims["avatar"].(string)
+
+	// Get form values
 	email := c.PostForm("email")
 	correctIndex := c.PostForm("correct_index")
 	choices := []string{
@@ -170,9 +194,9 @@ func UploadCustomChallenge(c *gin.Context) {
 
 	// ✅ Insert into gallery_posts using JWT user data
 	gallery := models.GalleryPost{
-		UserID:       fmt.Sprintf("%v", userID),
-		UserName:     fmt.Sprintf("%v", username),
-		UserAvatar:   fmt.Sprintf("%v", avatar),
+		UserID:       userID,
+		UserName:     username,
+		UserAvatar:   avatar,
 		ImageURL:     imageURL,
 		Choices:      choices,
 		CorrectIndex: correctIdx,
@@ -182,7 +206,7 @@ func UploadCustomChallenge(c *gin.Context) {
 
 	_, err = config.DB.Collection("gallery_posts").InsertOne(ctx, gallery)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save to gallery"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gallery insert failed"})
 		return
 	}
 

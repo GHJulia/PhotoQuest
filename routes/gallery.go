@@ -5,10 +5,10 @@ import (
 	"photoquest/controllers"
 )
 
-func GalleryRoutes(r *gin.Engine) {
-	grp := r.Group("/gallery")
+func GalleryRoutes(rg *gin.RouterGroup) {
+	r := rg.Group("/gallery")
 	{
-		grp.GET("/", controllers.GetGalleryPosts)
-		grp.POST("/like", controllers.ToggleLike)
+		r.GET("/", controllers.GetGalleryPosts)
+		r.POST("/like", controllers.ToggleLike)
 	}
 }
