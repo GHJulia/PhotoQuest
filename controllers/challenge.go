@@ -11,11 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/golang-jwt/jwt/v5"
 	"photoquest/config"
 	"photoquest/models"
     "photoquest/utils"
 )
 
+// Postman: All routes work fine สังสัยตรง uploadcustomchallenge นิดนึงตรงที่ gallery_post
 // RollChallenge
 // GET /challenge/roll?mode=easy
 func RollChallenge(c *gin.Context) {
@@ -116,7 +118,7 @@ func UploadCustomChallenge(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	userClaims := claims.(map[string]interface{})
+	userClaims := claims.(jwt.MapClaims)
 
 	userIDHex, ok := userClaims["user_id"].(string)
 	if !ok {
@@ -206,6 +208,8 @@ func UploadCustomChallenge(c *gin.Context) {
 
 	_, err = config.DB.Collection("gallery_posts").InsertOne(ctx, gallery)
 	if err != nil {
+		fmt.Println("Gallery insert error:", err)
+		fmt.Println("Gallery data:", gallery)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gallery insert failed"})
 		return
 	}

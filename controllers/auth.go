@@ -13,7 +13,7 @@ import (
     "photoquest/models"
     "photoquest/utils"
 )
-
+// Test in Postman: All route works: Accept for OTP doesn't save in database for real email but for example emails can why?
 // Sign Up
 func SignUp(c *gin.Context) {
 	name := c.PostForm("name")
