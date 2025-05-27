@@ -168,5 +168,23 @@ func UploadCustomChallenge(c *gin.Context) {
 		return
 	}
 
+	// ✅ Insert into gallery_posts using JWT user data
+	gallery := models.GalleryPost{
+		UserID:       fmt.Sprintf("%v", userID),
+		UserName:     fmt.Sprintf("%v", username),
+		UserAvatar:   fmt.Sprintf("%v", avatar),
+		ImageURL:     imageURL,
+		Choices:      choices,
+		CorrectIndex: correctIdx,
+		Likes:        []string{},
+		CreatedAt:    time.Now(),
+	}
+
+	_, err = config.DB.Collection("gallery_posts").InsertOne(ctx, gallery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save to gallery"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Custom challenge uploaded successfully"})
 }

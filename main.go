@@ -19,6 +19,7 @@ func main() {
     r := gin.Default()
     routes.AuthRoutes(r)
     routes.ChallengeRoutes(r)
+    routes.GalleryRoutes(r)
 
     r.Run(":8080") // API runs at localhost:8080
 }
