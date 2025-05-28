@@ -28,5 +28,6 @@ func main() {
 	routes.ChallengeRoutes(protected)
 	routes.GalleryRoutes(protected)
 
+
     r.Run(":8080") // API runs at localhost:8080
 }
