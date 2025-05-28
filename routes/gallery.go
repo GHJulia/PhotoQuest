@@ -10,5 +10,6 @@ func GalleryRoutes(rg *gin.RouterGroup) {
 	{
 		r.GET("/posts", controllers.GetGalleryPosts)
 		r.POST("/like", controllers.ToggleLike)
+		r.POST("/gallery/share", controllers.ShareGalleryPost)
 	}
 }

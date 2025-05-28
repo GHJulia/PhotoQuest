@@ -2,6 +2,7 @@ package controllers
 
 import (
     "context"
+    "fmt"
     "time"
 
     "github.com/gin-gonic/gin"
@@ -76,9 +77,12 @@ func SignUp(c *gin.Context) {
 		Email: email,
 		Code:  otp,
 	})
-	utils.SendEmail(email, otp)
 
-	c.JSON(200, gin.H{"message": "OTP sent to email"})
+	subject := "Your OTP Code"
+    body := fmt.Sprintf("Your OTP code is: %s", otp)
+    utils.SendEmail(email, subject, body)
+
+    c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Verify OTP
@@ -176,7 +180,10 @@ func ForgotPassword(c *gin.Context) {
         return
     }
 
-    utils.SendEmail(req.Email, otp)
+    subject := "Reset Your Password"
+    body := fmt.Sprintf("Your OTP for resetting password is: %s", otp)
+    utils.SendEmail(req.Email, subject, body)
+
     c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
