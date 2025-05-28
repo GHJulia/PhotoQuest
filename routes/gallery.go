@@ -8,7 +8,7 @@ import (
 func GalleryRoutes(rg *gin.RouterGroup) {
 	r := rg.Group("/gallery")
 	{
-		r.GET("/", controllers.GetGalleryPosts)
+		r.GET("/posts", controllers.GetGalleryPosts)
 		r.POST("/like", controllers.ToggleLike)
 	}
 }

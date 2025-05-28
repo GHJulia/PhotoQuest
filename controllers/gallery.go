@@ -12,6 +12,7 @@ import (
 	"photoquest/models"
 )
 
+// Postman: it can post photo in gallery page now and also like and unlike
 // Get All Gallery Posts
 func GetGalleryPosts(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -49,22 +50,47 @@ func ToggleLike(c *gin.Context) {
 	defer cancel()
 
 	postCol := config.DB.Collection("gallery_posts")
-	objectID, _ := primitive.ObjectIDFromHex(req.PostID)
 
-	// Toggle logic
-	update := bson.M{
-		"$cond": []interface{}{
-			bson.M{"$in": bson.A{req.Email, "$likes"}},
-			bson.M{"$pull": bson.M{"likes": req.Email}},
-			bson.M{"$push": bson.M{"likes": req.Email}},
-		},
+	// Convert PostID to ObjectID
+	objectID, err := primitive.ObjectIDFromHex(req.PostID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid post_id"})
+		return
 	}
 
-	_, err := postCol.UpdateByID(ctx, objectID, bson.M{"$bit": update})
+	// Find post by ID
+	var post models.GalleryPost
+	err = postCol.FindOne(ctx, bson.M{"_id": objectID}).Decode(&post)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	var update bson.M
+	liked := false
+	for _, email := range post.Likes {
+		if email == req.Email {
+			liked = true
+			break
+		}
+	}
+
+	if liked {
+		update = bson.M{"$pull": bson.M{"likes": req.Email}}
+	} else {
+		update = bson.M{"$addToSet": bson.M{"likes": req.Email}}
+	}
+
+	// Apply update
+	_, err = postCol.UpdateByID(ctx, objectID, update)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Like toggle failed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Like toggled"})
+	status := "liked"
+	if liked {
+		status = "unliked"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully " + status})
 }
