@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400" height="300" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#FEF6E9" rx="20"/>
+  
+  <!-- Podium -->
+  <rect x="100" y="200" width="60" height="80" fill="#FB923C"/>
+  <rect x="170" y="160" width="60" height="120" fill="#F97316"/>
+  <rect x="240" y="220" width="60" height="60" fill="#FB923C"/>
+  
+  <!-- Characters -->
+  <circle cx="200" cy="140" r="20" fill="#EA580C"/>
+  <circle cx="130" cy="180" r="20" fill="#EA580C"/>
+  <circle cx="270" cy="200" r="20" fill="#EA580C"/>
+  
+  <!-- Trophy -->
+  <path d="M190 80h20v10h10v30h-40v-30h10z" fill="#FBBF24"/>
+  <path d="M185 120h30v10h-30z" fill="#FBBF24"/>
+  
+  <!-- Numbers -->
+  <text x="190" y="200" font-family="Arial" font-size="24" fill="#FEF6E9" font-weight="bold">1</text>
+  <text x="120" y="240" font-family="Arial" font-size="24" fill="#FEF6E9" font-weight="bold">2</text>
+  <text x="260" y="260" font-family="Arial" font-size="24" fill="#FEF6E9" font-weight="bold">3</text>
+</svg> 
