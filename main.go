@@ -4,6 +4,8 @@ import (
     "log"
     "github.com/gin-gonic/gin"
     "github.com/joho/godotenv"
+    "github.com/gin-contrib/cors"
+
     "photoquest/config"
     "photoquest/routes"
     "photoquest/middleware"
@@ -18,6 +20,7 @@ func main() {
     config.ConnectDB()
     
     r := gin.Default()
+    r.Use(cors.Default())
 
     // Auth routes don’t need token
     routes.AuthRoutes(r)
