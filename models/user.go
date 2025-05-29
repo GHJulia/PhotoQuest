@@ -12,5 +12,6 @@ type User struct {
     Verified bool               `bson:"verified" json:"verified"`
     Avatar   string             `bson:"avatar" json:"avatar"` // ✅ Add this line
     TotalScore int               `bson:"total_score" json:"total_score"`
+    Role       string             `bson:"role" json:"role"`
 }
 

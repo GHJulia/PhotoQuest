@@ -57,6 +57,7 @@ func SignUp(c *gin.Context) {
 		Verified:   false,
 		Avatar:     "", // can later be updated via profile page
 		TotalScore: 0,
+        Role:       "user",
 	}
 
 	_, err = usersCollection.InsertOne(ctx, newUser)
@@ -143,10 +144,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, _ := utils.GenerateJWT(user.ID.Hex(), user.Username, user.Avatar)
-	c.JSON(200, gin.H{"message": "Login successful", "token": token})
+	token, _ := utils.GenerateJWT(user.ID.Hex(), user.Username, user.Avatar, user.Role)
+	c.JSON(200, gin.H{
+		"message": "Login successful",
+		"token":   token,
+	})
 }
-
 // Forgot Password (Send OTP)
 func ForgotPassword(c *gin.Context) {
     var req struct {

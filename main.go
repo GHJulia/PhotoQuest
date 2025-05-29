@@ -30,7 +30,7 @@ func main() {
 	routes.ChallengeRoutes(protected)
 	routes.GalleryRoutes(protected)
     routes.LeaderboardRoutes(protected)
-
+    routes.AdminRoutes(protected)
 
     r.Run(":8080") // API runs at localhost:8080
 }
