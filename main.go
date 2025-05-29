@@ -26,6 +26,7 @@ func main() {
 	protected := r.Group("/")
 	protected.Use(middlewares.JWTAuthMiddleware())
     routes.ProfileRoutes(protected)
+    routes.MyPhotosRoutes(protected)
 	routes.ChallengeRoutes(protected)
 	routes.GalleryRoutes(protected)
 
