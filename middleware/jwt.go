@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func JWTMiddleware() gin.HandlerFunc {
+func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -40,6 +40,12 @@ func JWTMiddleware() gin.HandlerFunc {
 		}
 
 		// ✅ Set claims into context
+		//c.Set("claims", claims)
+		
+		// ✅ Set user_id into context
+		if userID, ok := claims["user_id"].(string); ok {
+			c.Set("user_id", userID)
+		}
 		c.Set("claims", claims)
 
 		c.Next()

@@ -29,4 +29,5 @@ func ConnectDB() {
     }
 
     DB = client.Database(os.Getenv("DB_NAME"))
+    log.Println("✅ MongoDB connected to:", os.Getenv("DB_NAME"))
 }

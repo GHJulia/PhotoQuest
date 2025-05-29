@@ -24,7 +24,8 @@ func main() {
 
     // All routes below need JWT
 	protected := r.Group("/")
-	protected.Use(middlewares.JWTMiddleware())
+	protected.Use(middlewares.JWTAuthMiddleware())
+    routes.ProfileRoutes(protected)
 	routes.ChallengeRoutes(protected)
 	routes.GalleryRoutes(protected)
 

@@ -143,3 +143,113 @@ func ShareGalleryPost(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"message": "Share link sent to email"})
 }
+
+// Photo Detail Page: Get each post id that user click to show only one
+// GET /gallery/post/:id
+func GetGalleryPostByID(c *gin.Context) {
+	postID := c.Param("id")
+	objectID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid post ID"})
+		return
+	}
+
+	var post models.GalleryPost
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = config.DB.Collection("gallery_posts").FindOne(ctx, bson.M{"_id": objectID}).Decode(&post)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "Post not found"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"id":            post.ID.Hex(),
+		"user_id":       post.UserID.Hex(),
+		"user_name":     post.UserName,
+		"user_avatar":   post.UserAvatar,
+		"image_url":     post.ImageURL,
+		"created_at":    post.CreatedAt.Format("2006-01-02 15:04"),
+		"choices":       post.Choices,
+		"likes_count":   len(post.Likes),
+		"correct_index": post.CorrectIndex, // optional: omit if frontend handles this only on submit
+	})
+}
+
+// Photo Detail Page: Multiple choice answer of each user
+// POST /gallery/answer
+func SubmitAnswer(c *gin.Context) {
+	type AnswerRequest struct {
+		PostID  string `json:"post_id"`
+		UserID  string `json:"user_id"`
+		Answer  string `json:"answer"`
+	}
+
+	var req AnswerRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	// Convert IDs
+	postOID, err := primitive.ObjectIDFromHex(req.PostID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid post ID"})
+		return
+	}
+	userOID, err := primitive.ObjectIDFromHex(req.UserID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find gallery post
+	var post models.GalleryPost
+	err = config.DB.Collection("gallery_posts").FindOne(ctx, bson.M{"_id": postOID}).Decode(&post)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "Post not found"})
+		return
+	}
+
+	// Check if already answered
+	count, _ := config.DB.Collection("user_answers").CountDocuments(ctx, bson.M{
+		"user_id": userOID,
+		"post_id": postOID,
+	})
+	if count > 0 {
+		c.JSON(409, gin.H{"error": "You already answered this post"})
+		return
+	}
+
+	// Evaluate answer
+	isCorrect := post.Choices[post.CorrectIndex] == req.Answer
+
+	// Save answer attempt
+	answer := models.UserAnswer{
+		UserID:     userOID,
+		PostID:     postOID,
+		Answer:     req.Answer,
+		IsCorrect:  isCorrect,
+		AnsweredAt: time.Now().Unix(),
+	}
+	_, err = config.DB.Collection("user_answers").InsertOne(ctx, answer)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to save answer"})
+		return
+	}
+
+	// Award point if correct
+	if isCorrect {
+		_, _ = config.DB.Collection("users").UpdateByID(ctx, userOID, bson.M{"$inc": bson.M{"score": 20}})
+	}
+
+	c.JSON(200, gin.H{
+		"correct":  isCorrect,
+		"correctAnswer": post.Choices[post.CorrectIndex],
+		"message":  "Answer submitted",
+	})
+}
