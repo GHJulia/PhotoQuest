@@ -16,73 +16,64 @@ import (
 )
 // Test in Postman: All route works: Accept for OTP doesn't save in database for real email but for example emails can why?
 // Sign Up
+// Sign Up
 func SignUp(c *gin.Context) {
 	name := c.PostForm("name")
+	surname := c.PostForm("surname")
+	username := c.PostForm("username")
 	email := c.PostForm("email")
 	password := c.PostForm("password")
 
-	// Validate input
-	if name == "" || email == "" || password == "" {
+	if name == "" || surname == "" || username == "" || email == "" || password == "" {
 		c.JSON(400, gin.H{"error": "Missing required fields"})
 		return
 	}
 
-	// Check for existing user
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	usersCollection := config.DB.Collection("users")
 
-	var existingUser models.User
-	err := usersCollection.FindOne(ctx, bson.M{"email": email}).Decode(&existingUser)
+	var existing models.User
+	err := usersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"email": email},
+			{"username": username},
+		},
+	}).Decode(&existing)
+
 	if err == nil {
-		c.JSON(400, gin.H{"error": "Email already exists"})
+		c.JSON(400, gin.H{"error": "Email or username already exists"})
 		return
 	}
 
-	// Hash password
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	// Handle avatar upload
-	var avatarURL string
-	fileHeader, err := c.FormFile("avatar")
-	if err == nil {
-		src, _ := fileHeader.Open()
-		defer src.Close()
-		avatarURL, err = utils.UploadToS3(src, fileHeader)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "Failed to upload avatar", "detail": err.Error()})
-			return
-		}
-	} else {
-		avatarURL = "https://your-default-avatar-url.com/default.png"
+	newUser := models.User{
+		Name:       name,
+		Surname:    surname,
+		Username:   username,
+		Email:      email,
+		Password:   string(hashed),
+		Verified:   false,
+		Avatar:     "", // can later be updated via profile page
+		TotalScore: 0,
 	}
 
-	// Insert new user
-	newUser := models.User{
-		Name:     name,
-		Email:    email,
-		Password: string(hashed),
-		Avatar:   avatarURL,
-		Verified: false,
-	}
 	_, err = usersCollection.InsertOne(ctx, newUser)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to create user"})
 		return
 	}
 
-	// Send OTP
 	otp := utils.GenerateOTP()
 	_, _ = config.DB.Collection("otps").InsertOne(ctx, models.OTP{
 		Email: email,
 		Code:  otp,
 	})
 
-	subject := "Your OTP Code"
-    body := fmt.Sprintf("Your OTP code is: %s", otp)
-    utils.SendEmail(email, subject, body)
+	utils.SendEmail(email, "Your OTP Code", fmt.Sprintf("Your OTP code is: %s", otp))
 
-    c.JSON(200, gin.H{"message": "OTP sent to email"})
+	c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Verify OTP
@@ -120,33 +111,40 @@ func VerifyOTP(c *gin.Context) {
 }
 
 // Login
+// Login (email OR username)
 func Login(c *gin.Context) {
-    var req struct {
-        Email    string `json:"email"`
-        Password string `json:"password"`
-    }
-    c.BindJSON(&req)
+	var req struct {
+		Identifier string `json:"identifier"` // email or username
+		Password   string `json:"password"`
+	}
+	c.BindJSON(&req)
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    usersCollection := config.DB.Collection("users")
+	usersCollection := config.DB.Collection("users")
 
-    var user models.User
-    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&user)
-    if err != nil || !user.Verified {
-        c.JSON(401, gin.H{"error": "User not found or not verified"})
-        return
-    }
+	var user models.User
+	err := usersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"email": req.Identifier},
+			{"username": req.Identifier},
+		},
+	}).Decode(&user)
 
-    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-    if err != nil {
-        c.JSON(401, gin.H{"error": "Wrong password"})
-        return
-    }
+	if err != nil || !user.Verified {
+		c.JSON(401, gin.H{"error": "User not found or not verified"})
+		return
+	}
 
-    token, _ := utils.GenerateJWT(user.ID.Hex(), user.Name, user.Avatar)
-    c.JSON(200, gin.H{"message": "Login successful", "token": token})
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
+	if err != nil {
+		c.JSON(401, gin.H{"error": "Wrong password"})
+		return
+	}
+
+	token, _ := utils.GenerateJWT(user.ID.Hex(), user.Username, user.Avatar)
+	c.JSON(200, gin.H{"message": "Login successful", "token": token})
 }
 
 // Forgot Password (Send OTP)
