@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { User, Upload, Trash2 } from 'lucide-react';
+import { User, Upload, Trash2, Camera } from 'lucide-react';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
+import { toast } from '@/components/ui/use-toast';
 
 const Profile = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: 'Amelia',
     surname: 'Bennett',
@@ -24,30 +27,92 @@ const Profile = () => {
     }));
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast({
+          title: "File too large",
+          description: "Please select an image under 5MB",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select an image file",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setProfileImage(e.target?.result as string);
+        toast({
+          title: "Success!",
+          description: "Profile picture updated successfully",
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Profile updated:', formData);
+    toast({
+      title: "Profile Updated",
+      description: "Your changes have been saved successfully",
+    });
   };
 
   return (
-    <div className="min-h-screen bg-[#FEF6E9]">
+    <div className="min-h-screen flex flex-col bg-[#FEF6E9]">
       <Navigation />
       
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="flex-grow max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-orange-800 mb-4">Profile</h1>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
           {/* Profile Info Card */}
           <Card className="photo-card">
             <CardContent className="p-8 text-center">
               <div className="relative mb-6">
-                <div className="w-24 h-24 bg-gradient-to-br from-pink-400 to-red-500 rounded-full mx-auto flex items-center justify-center mb-4">
-                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center">
-                    <User className="h-12 w-12 text-gray-600" />
+                <div className="w-32 h-32 mx-auto relative group">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-pink-400 to-red-500 p-1">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white">
+                      {profileImage ? (
+                        <img 
+                          src={profileImage} 
+                          alt="Profile" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User className="h-16 w-16 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute bottom-0 right-0 bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-full shadow-lg transition-transform transform hover:scale-110"
+                  >
+                    <Camera className="h-5 w-5" />
+                  </button>
                 </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
               </div>
               
               <h2 className="text-2xl font-bold text-orange-800 mb-2">Amelia Bennett</h2>
@@ -57,9 +122,12 @@ const Profile = () => {
                 <p className="text-2xl font-bold text-orange-900">1,000 Points</p>
               </div>
               
-              <Button className="w-full mb-4 bg-orange-500 hover:bg-orange-600 text-white">
+              <Button 
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full mb-4 bg-orange-500 hover:bg-orange-600 text-white"
+              >
                 <Upload className="mr-2 h-4 w-4" />
-                Upload Picture
+                Change Picture
               </Button>
               
               <Button variant="destructive" className="w-full">
@@ -146,7 +214,7 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full game-button mt-6">
+                <Button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white">
                   Save Changes
                 </Button>
               </form>
