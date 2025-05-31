@@ -35,5 +35,5 @@ func main() {
     routes.LeaderboardRoutes(protected)
     routes.AdminRoutes(protected)
 
-    r.Run(":8080") // API runs at localhost:8080
+    r.Run(":8081") // API runs at localhost:8080
 }

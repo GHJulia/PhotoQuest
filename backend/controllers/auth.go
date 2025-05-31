@@ -24,6 +24,8 @@ func SignUp(c *gin.Context) {
 	email := c.PostForm("email")
 	password := c.PostForm("password")
 
+    fmt.Println("Received signup data:", name, surname, username, email)
+
 	if name == "" || surname == "" || username == "" || email == "" || password == "" {
 		c.JSON(400, gin.H{"error": "Missing required fields"})
 		return
@@ -60,11 +62,13 @@ func SignUp(c *gin.Context) {
         Role:       "user",
 	}
 
-	_, err = usersCollection.InsertOne(ctx, newUser)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create user"})
-		return
-	}
+    res, err := usersCollection.InsertOne(ctx, newUser)
+    if err != nil {
+        fmt.Println("❌ Failed to insert user:", err)  // this line will print real reason
+        c.JSON(500, gin.H{"error": "Failed to create user"})
+        return
+    }
+    fmt.Println("✅ User inserted:", res.InsertedID)   // optional log
 
 	otp := utils.GenerateOTP()
 	_, _ = config.DB.Collection("otps").InsertOne(ctx, models.OTP{
