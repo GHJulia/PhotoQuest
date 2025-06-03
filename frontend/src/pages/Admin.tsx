@@ -68,10 +68,31 @@ const Admin = () => {
         axios.get('/admin/users'),
         axios.get('/admin/tasks')
       ]);
-      setUsers(usersRes.data);
-      setChallenges(tasksRes.data);
+
+      // Transform users data to match frontend interface
+      const transformedUsers = usersRes.data.map((user: any) => ({
+        id: user._id || '', // MongoDB ID
+        name: user.name || '',
+        email: user.email || '',
+        join_date: user.join_date || '',
+        points: user.points || 0
+      }));
+
+      // Transform tasks data to match frontend interface
+      const transformedTasks = tasksRes.data.map((task: any) => ({
+        id: task.id || '',
+        task_description: task.task_description || '',
+        difficulty: task.difficulty || 'easy',
+        points: task.points || 0,
+        created_date: task.created_date || '',
+        status: task.status || 'active'
+      }));
+
+      setUsers(transformedUsers);
+      setChallenges(transformedTasks);
     } catch (err) {
       console.error('Error fetching data:', err);
+      // Add error toast or notification here
     }
   };
 
@@ -200,15 +221,23 @@ const Admin = () => {
                                 {user.join_date}
                               </TableCell>
                               <TableCell className="flex items-center gap-2">
-                                <Star className="h-4 w-4 text-yellow-500" />
+                                <Trophy className="h-4 w-4 text-gray-400" />
                                 {user.points}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  <Button variant="ghost" size="sm" onClick={() => updateUser(user.id, user)} className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setSelectedUser(user)}
+                                  >
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => deleteUser(user.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => deleteUser(user.id)}
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
@@ -238,8 +267,15 @@ const Admin = () => {
                       />
                     </div>
                     <Button 
-                      onClick={() => navigate('/admin/challenges/new')}
-                      className="bg-orange-500 hover:bg-orange-600 text-white"
+                      onClick={() => setSelectedTask({ 
+                        id: '', 
+                        task_description: '', 
+                        difficulty: 'easy',
+                        points: 100,
+                        created_date: new Date().toISOString(),
+                        status: 'active'
+                      })}
+                      className="bg-orange-500 hover:bg-orange-600"
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       New Task
@@ -251,7 +287,7 @@ const Admin = () => {
                     <Table>
                       <TableHeader className="bg-orange-50">
                         <TableRow>
-                          <TableHead className="w-[40%]">Task Description</TableHead>
+                          <TableHead>Task Description</TableHead>
                           <TableHead>Difficulty</TableHead>
                           <TableHead>Points</TableHead>
                           <TableHead>Created Date</TableHead>
@@ -268,38 +304,40 @@ const Admin = () => {
                             <TableRow key={task.id}>
                               <TableCell className="font-medium">{task.task_description}</TableCell>
                               <TableCell>
-                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  task.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
-                                  task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-red-100 text-red-700'
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                  task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
                                 }`}>
                                   {task.difficulty}
                                 </span>
                               </TableCell>
-                              <TableCell>
-                                <span className="flex items-center gap-2">
-                                  <Trophy className="h-4 w-4 text-orange-500" />
-                                  {task.points}
-                                </span>
-                              </TableCell>
                               <TableCell className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-gray-400" />
-                                {task.created_date}
+                                <Star className="h-4 w-4 text-gray-400" />
+                                {task.points}
                               </TableCell>
+                              <TableCell>{task.created_date}</TableCell>
                               <TableCell>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  task.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  task.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                                 }`}>
                                   {task.status}
                                 </span>
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  <Button variant="ghost" size="sm" onClick={() => updateTask(task.id, task)} className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setSelectedTask(task)}
+                                  >
                                     <Edit className="h-4 w-4" />
                                   </Button>
                                   <Button
-                                    variant="ghost" size="sm" onClick={() => deleteTask(task.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => deleteTask(task.id)}
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
@@ -322,18 +360,16 @@ const Admin = () => {
         {/* Modals */}
       {selectedUser && (
         <EditUserModal
-          open={!!selectedUser}
           user={selectedUser}
           onClose={() => setSelectedUser(null)}
-          onUpdate={fetchData}
+          onSave={updateUser}
         />
       )}
       {selectedTask && (
         <EditTaskModal
-          open={!!selectedTask}
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onUpdate={fetchData}
+          onSave={updateTask}
         />
       )}
 
