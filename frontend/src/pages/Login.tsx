@@ -7,6 +7,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, Key, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '../components/ui/sonner';
+import jwt_decode from 'jwt-decode';
+
+interface DecodedToken {
+  role: string;
+  exp: number;
+  [key: string]: any;
+}
 
 const Login = () => {
   const location = useLocation();
@@ -64,7 +71,16 @@ const Login = () => {
 
       const result = await res.json();
       if (res.ok && result.token) {
+        // Store token
+        localStorage.setItem('token', result.token);
+
+        // Decode token to get role
+        const decoded: DecodedToken = jwt_decode(result.token);
+        localStorage.setItem('role', decoded.role || '');
+
+        // Login using context (if needed)
         await login(formData.email, formData.password);
+
         toast(
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
@@ -76,6 +92,14 @@ const Login = () => {
             <div className="text-sm text-gray-800">Login successful!</div>
           </div>
         );
+
+        // Redirect based on role
+        if (decoded.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/profile'); // or "/" if you prefer
+        }
+
       } else {
         toast(
           <div className="flex flex-col gap-1">
