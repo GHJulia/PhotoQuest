@@ -9,12 +9,14 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
   const { user } = useAuth();
+  const userRole = localStorage.getItem('role');
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requireAdmin && !user.isAdmin) {
+  if (requireAdmin && userRole !== 'admin') {
+    console.log('Access denied: Admin role required');
     return <Navigate to="/" replace />;
   }
 

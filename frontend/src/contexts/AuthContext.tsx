@@ -154,9 +154,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { token } = response.data;
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        // โหลดข้อมูล user ใหม่ (ถ้ามี API แยกสำหรับดึง user profile)
+        // Load user data (if there's a separate API for user profile)
         await refreshUser();
-        navigate('/');
       } else if (response.data.error) {
         throw new Error(response.data.error);
       } else {
