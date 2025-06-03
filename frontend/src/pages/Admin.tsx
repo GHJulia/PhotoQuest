@@ -52,6 +52,7 @@ const Admin = () => {
   const navigate = useNavigate();
   const [searchUser, setSearchUser] = useState('');
   const [searchChallenge, setSearchChallenge] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
 
@@ -72,10 +73,10 @@ const Admin = () => {
       // Transform users data to match frontend interface
       const transformedUsers = usersRes.data.map((user: any) => ({
         id: user._id || '', // MongoDB ID
-        name: user.name || '',
+        name: user.name ? `${user.name} ${user.surname || ''}`.trim() : '',
         email: user.email || '',
-        join_date: user.join_date || '',
-        points: user.points || 0
+        join_date: formatDate(user.ID?.timestamp || new Date()),
+        points: user.TotalScore || 0
       }));
 
       // Transform tasks data to match frontend interface
@@ -135,8 +136,9 @@ const Admin = () => {
   };
 
   // Format date to readable string
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString: string | Date) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -193,59 +195,74 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-lg border border-orange-200 overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-orange-50">
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Join Date</TableHead>
-                          <TableHead>Points</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                         {users
-                          .filter(user =>
-                            user.name.toLowerCase().includes(searchUser.toLowerCase()) ||
-                            user.email.toLowerCase().includes(searchUser.toLowerCase())
-                          )
-                          .map((user) => (
-                            <TableRow key={user.id}>
-                              <TableCell className="font-medium">{user.name}</TableCell>
-                              <TableCell className="flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-gray-400" />
-                                {user.email}
-                              </TableCell>
-                              <TableCell className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-gray-400" />
-                                {user.join_date}
-                              </TableCell>
-                              <TableCell className="flex items-center gap-2">
-                                <Trophy className="h-4 w-4 text-gray-400" />
-                                {user.points}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setSelectedUser(user)}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => deleteUser(user.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
+                    <div className="max-h-[600px] overflow-y-auto">
+                      <Table>
+                        <TableHeader className="bg-orange-50 sticky top-0">
+                          <TableRow>
+                            <TableHead className="w-[25%]">Name</TableHead>
+                            <TableHead className="w-[25%]">Email</TableHead>
+                            <TableHead className="w-[20%]">Join Date</TableHead>
+                            <TableHead className="w-[15%]">Points</TableHead>
+                            <TableHead className="w-[15%] text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {users
+                            .filter(user =>
+                              user.name.toLowerCase().includes(searchUser.toLowerCase()) ||
+                              user.email.toLowerCase().includes(searchUser.toLowerCase())
+                            )
+                            .map((user) => (
+                              <TableRow key={user.id} className="hover:bg-orange-50">
+                                <TableCell className="py-4">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    <span className="font-medium">{user.name || 'No name'}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Mail className="h-4 w-4 text-gray-400" />
+                                    <span>{user.email}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-gray-400" />
+                                    <span>{user.join_date}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Trophy className="h-4 w-4 text-gray-400" />
+                                    <span>{user.points}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setSelectedUser(user)}
+                                      className="hover:bg-blue-100"
+                                    >
+                                      <Edit className="h-4 w-4 text-blue-600" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => deleteUser(user.id)}
+                                      className="hover:bg-red-100"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -257,6 +274,56 @@ const Admin = () => {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-2xl text-orange-800">Photography Tasks</CardTitle>
                   <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDifficulty(prev => 
+                          prev.includes('easy') 
+                            ? prev.filter(d => d !== 'easy')
+                            : [...prev, 'easy']
+                        )}
+                        className={`${
+                          selectedDifficulty.includes('easy')
+                            ? 'bg-green-100 text-green-800 border-green-200'
+                            : 'bg-transparent'
+                        }`}
+                      >
+                        Easy
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDifficulty(prev => 
+                          prev.includes('medium') 
+                            ? prev.filter(d => d !== 'medium')
+                            : [...prev, 'medium']
+                        )}
+                        className={`${
+                          selectedDifficulty.includes('medium')
+                            ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                            : 'bg-transparent'
+                        }`}
+                      >
+                        Medium
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDifficulty(prev => 
+                          prev.includes('hard') 
+                            ? prev.filter(d => d !== 'hard')
+                            : [...prev, 'hard']
+                        )}
+                        className={`${
+                          selectedDifficulty.includes('hard')
+                            ? 'bg-red-100 text-red-800 border-red-200'
+                            : 'bg-transparent'
+                        }`}
+                      >
+                        Hard
+                      </Button>
+                    </div>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                       <Input
@@ -284,68 +351,73 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-lg border border-orange-200 overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-orange-50">
-                        <TableRow>
-                          <TableHead>Task Description</TableHead>
-                          <TableHead>Difficulty</TableHead>
-                          <TableHead>Points</TableHead>
-                          <TableHead>Created Date</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {challenges
-                          .filter(task =>
-                            task.task_description.toLowerCase().includes(searchChallenge.toLowerCase())
-                          )
-                          .map((task) => (
-                            <TableRow key={task.id}>
-                              <TableCell className="font-medium">{task.task_description}</TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                  task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                                  task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
-                                }`}>
-                                  {task.difficulty}
-                                </span>
-                              </TableCell>
-                              <TableCell className="flex items-center gap-2">
-                                <Star className="h-4 w-4 text-gray-400" />
-                                {task.points}
-                              </TableCell>
-                              <TableCell>{task.created_date}</TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                  task.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {task.status}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setSelectedTask(task)}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => deleteTask(task.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
+                    <div className="max-h-[600px] overflow-y-auto">
+                      <Table>
+                        <TableHeader className="bg-orange-50 sticky top-0">
+                          <TableRow>
+                            <TableHead className="w-[30%]">Task Description</TableHead>
+                            <TableHead className="w-[15%]">Difficulty</TableHead>
+                            <TableHead className="w-[15%]">Points</TableHead>
+                            <TableHead className="w-[20%]">Created Date</TableHead>
+                            <TableHead className="w-[10%]">Status</TableHead>
+                            <TableHead className="w-[10%] text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {challenges
+                            .filter(task =>
+                              task.task_description.toLowerCase().includes(searchChallenge.toLowerCase()) &&
+                              (selectedDifficulty.length === 0 || selectedDifficulty.includes(task.difficulty))
+                            )
+                            .map((task) => (
+                              <TableRow key={task.id}>
+                                <TableCell className="font-medium">{task.task_description}</TableCell>
+                                <TableCell>
+                                  <span className={`px-2 py-1 rounded-full text-xs ${
+                                    task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                    task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {task.difficulty}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="flex items-center gap-2 py-4">
+                                  <Star className="h-4 w-4 text-gray-400" />
+                                  <span className="align-middle">{task.points}</span>
+                                </TableCell>
+                                <TableCell>{task.created_date}</TableCell>
+                                <TableCell>
+                                  <span className={`px-2 py-1 rounded-full text-xs ${
+                                    task.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {task.status}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setSelectedTask(task)}
+                                      className="hover:bg-blue-100"
+                                    >
+                                      <Edit className="h-4 w-4 text-blue-600" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => deleteTask(task.id)}
+                                      className="hover:bg-red-100"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
