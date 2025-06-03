@@ -1,27 +1,49 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { Camera, Trophy } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Navigation from '@/components/Navigation';
-import Footer from '@/components/Footer';
+import Navigation from '../components/Navigation';
+import Footer from '../components/Footer';
+import { toast } from '../components/ui/sonner';
+import React from 'react';
+import api from '../lib/axios';
+
+interface LocationState {
+  challenge?: {
+    prompt: string;
+    mode: string;
+  };
+  mode?: string;
+}
 
 const CreateGuess = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const state = location.state as LocationState;
   
-  // Get difficulty from URL parameters
+  // Get difficulty from state or URL parameters
   const searchParams = new URLSearchParams(location.search);
-  const initialDifficulty = searchParams.get('difficulty') || 'Medium';
+  const initialDifficulty = state?.challenge?.mode || state?.mode || searchParams.get('difficulty') || 'Medium';
 
   const [prompt, setPrompt] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctAnswers, setCorrectAnswers] = useState<string[]>([]);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [difficulty, setDifficulty] = useState(initialDifficulty);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [difficulty] = useState(initialDifficulty.charAt(0).toUpperCase() + initialDifficulty.slice(1).toLowerCase());
   const [questionType, setQuestionType] = useState<'single' | 'multiple'>('single');
+
+  // Helper function to get difficulty color
+  const getDifficultyColor = (diff: string) => {
+    const diffLower = diff.toLowerCase();
+    if (diffLower === 'easy') return 'bg-green-500 text-white';
+    if (diffLower === 'medium') return 'bg-yellow-500 text-white';
+    if (diffLower === 'hard') return 'bg-red-500 text-white';
+    return 'bg-yellow-500 text-white'; // default
+  };
 
   const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...options];
@@ -32,9 +54,10 @@ const CreateGuess = () => {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setSelectedImage(file);
       const reader = new FileReader();
-      reader.onload = (e) => {
-        setSelectedImage(e.target?.result as string);
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -42,6 +65,7 @@ const CreateGuess = () => {
 
   const removeImage = () => {
     setSelectedImage(null);
+    setImagePreview(null);
   };
 
   const handleCorrectAnswerToggle = (optionIndex: number) => {
@@ -65,16 +89,80 @@ const CreateGuess = () => {
     }
   };
 
-  const handleSubmit = () => {
-    console.log('Creating guess with data:', {
-      prompt,
-      options,
-      correctAnswers,
-      selectedImage,
-      difficulty,
-      questionType
-    });
+  const handleSubmit = async () => {
+    if (!selectedImage || !prompt || options.some(opt => !opt.trim()) || correctAnswers.length === 0) {
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Please fill in all fields and select a correct answer.</div>
+        </div>
+      );
+      return;
+    }
+
+    try {
+      // Create form data with the actual file
+      const formData = new FormData();
+      formData.append('photo', selectedImage);
+      formData.append('email', JSON.parse(localStorage.getItem('user') || '{}').email);
+      formData.append('choice1', options[0]);
+      formData.append('choice2', options[1]);
+      formData.append('choice3', options[2]);
+      formData.append('choice4', options[3]);
+      formData.append('correct_index', String(correctAnswers[0].charCodeAt(0) - 97));
+      formData.append('prompt', prompt);
+      formData.append('difficulty', difficulty);
+
+      // Log FormData contents
+      console.log('FormData contents:');
+      for (let [key, value] of formData.entries()) {
+        console.log(key, ':', value);
+      }
+
+      // Send to backend using axios
+      const res = await api.post('/challenge/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        }
+      });
+
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Success
+          </div>
+          <div className="text-sm text-gray-800">Challenge created successfully!</div>
+        </div>
+      );
+      
+      // Navigate to gallery page after 1 second
+      setTimeout(() => {
     navigate('/gallery');
+      }, 1000);
+    } catch (error) {
+      console.error('Error creating challenge:', error);
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Error
+          </div>
+          <div className="text-sm text-gray-800">
+            {error instanceof Error ? error.message : 'Failed to create challenge. Please try again.'}
+          </div>
+        </div>
+      );
+    }
   };
 
   const optionColors = [
@@ -127,7 +215,7 @@ const CreateGuess = () => {
                   ) : (
                     <div className="relative">
                       <img 
-                        src={selectedImage} 
+                        src={imagePreview || undefined} 
                         alt="Uploaded photo"
                         className="w-full h-80 object-cover rounded-lg"
                       />
@@ -154,13 +242,7 @@ const CreateGuess = () => {
                       Difficulty Level & Points
                     </label>
                     <div className="flex items-center gap-3">
-                      <div className={`flex-1 p-3 rounded-lg font-medium ${
-                        difficulty === 'Easy' 
-                          ? 'bg-green-500 text-white' 
-                          : difficulty === 'Medium'
-                          ? 'bg-yellow-500 text-white'
-                          : 'bg-red-500 text-white'
-                      }`}>
+                      <div className={`flex-1 p-3 rounded-lg font-medium ${getDifficultyColor(difficulty)}`}>
                         {difficulty}
                       </div>
                       <div className="bg-orange-500 text-white px-4 py-3 rounded-lg font-medium flex items-center gap-1">
@@ -266,7 +348,7 @@ const CreateGuess = () => {
                   {selectedImage && (
                     <div className="mb-4">
                       <img 
-                        src={selectedImage} 
+                        src={imagePreview || undefined} 
                         alt="Preview"
                         className="w-full h-48 object-cover rounded-lg border-2 border-orange-300"
                       />
@@ -299,13 +381,7 @@ const CreateGuess = () => {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-orange-800 font-medium">Difficulty:</span>
-                        <span className={`px-3 py-1 rounded-md text-white ${
-                          difficulty === 'Easy' 
-                            ? 'bg-green-500' 
-                            : difficulty === 'Medium'
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-md text-white ${getDifficultyColor(difficulty)}`}>
                           {difficulty}
                         </span>
                       </div>

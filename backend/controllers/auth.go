@@ -1,30 +1,38 @@
 package controllers
 
 import (
-    "context"
-    "fmt"
-    "time"
+	"context"
+	"fmt"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "golang.org/x/crypto/bcrypt"
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo/options"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"golang.org/x/crypto/bcrypt"
 
-    "photoquest/config"
-    "photoquest/models"
-    "photoquest/utils"
+	"photoquest/config"
+	"photoquest/models"
+	"photoquest/utils"
 )
-// Test in Postman: All route works: Accept for OTP doesn't save in database for real email but for example emails can why?
-// Sign Up
+
 // Sign Up
 func SignUp(c *gin.Context) {
-	name := c.PostForm("name")
-	surname := c.PostForm("surname")
-	username := c.PostForm("username")
-	email := c.PostForm("email")
-	password := c.PostForm("password")
+	var req struct {
+		Name     string `json:"name"`
+		Surname  string `json:"surname"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request format"})
+		return
+	}
 
-    fmt.Println("Received signup data:", name, surname, username, email)
+	name := req.Name
+	surname := req.Surname
+	username := req.Username
+	email := req.Email
+	password := req.Password
 
 	if name == "" || surname == "" || username == "" || email == "" || password == "" {
 		c.JSON(400, gin.H{"error": "Missing required fields"})
@@ -48,7 +56,11 @@ func SignUp(c *gin.Context) {
 		return
 	}
 
-	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to hash password"})
+		return
+	}
 
 	newUser := models.User{
 		Name:       name,
@@ -57,66 +69,91 @@ func SignUp(c *gin.Context) {
 		Email:      email,
 		Password:   string(hashed),
 		Verified:   false,
-		Avatar:     "", // can later be updated via profile page
+		AvatarURL:  "",
 		TotalScore: 0,
-        Role:       "user",
+		Role:       "user",
 	}
 
-    res, err := usersCollection.InsertOne(ctx, newUser)
-    if err != nil {
-        fmt.Println("❌ Failed to insert user:", err)  // this line will print real reason
-        c.JSON(500, gin.H{"error": "Failed to create user"})
-        return
-    }
-    fmt.Println("✅ User inserted:", res.InsertedID)   // optional log
+	res, err := usersCollection.InsertOne(ctx, newUser)
+	if err != nil {
+		fmt.Println("❌ Failed to insert user:", err)
+		c.JSON(500, gin.H{"error": "Failed to create user"})
+		return
+	}
+	fmt.Println("✅ User inserted:", res.InsertedID)
+
+	// ลบ OTP เก่าก่อน
+	_, err = config.DB.Collection("otps").DeleteMany(ctx, bson.M{"email": email})
+	if err != nil {
+		fmt.Println("Failed to delete old OTP:", err)
+		// ไม่ต้อง return ให้ส่ง OTP ใหม่ต่อ
+	}
 
 	otp := utils.GenerateOTP()
-	_, _ = config.DB.Collection("otps").InsertOne(ctx, models.OTP{
+
+	_, err = config.DB.Collection("otps").InsertOne(ctx, models.OTP{
 		Email: email,
 		Code:  otp,
 	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to save OTP"})
+		return
+	}
 
-	utils.SendEmail(email, "Your OTP Code", fmt.Sprintf("Your OTP code is: %s", otp))
+	err = utils.SendEmail(email, "Your OTP Code", fmt.Sprintf("Your OTP code is: %s", otp))
+	if err != nil {
+		fmt.Println("❌ Failed to send OTP email:", err)
+		// ไม่ต้อง return error
+	}
 
 	c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Verify OTP
 func VerifyOTP(c *gin.Context) {
-    var req struct {
-        Email string `json:"email"`
-        Code  string `json:"code"`
-    }
-    c.BindJSON(&req)
+	var req struct {
+		Email           string `json:"email"`
+		Code            string `json:"code"`
+		IsPasswordReset bool   `json:"isPasswordReset"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		fmt.Println("BindJSON error:", err)
+		c.JSON(400, gin.H{"error": "Invalid request format"})
+		return
+	}
+	fmt.Println("VerifyOTP received:", req.Email, req.Code)
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    otpsCollection := config.DB.Collection("otps")
-    usersCollection := config.DB.Collection("users")
+	otpsCollection := config.DB.Collection("otps")
+	usersCollection := config.DB.Collection("users")
 
-    var otp models.OTP
-    err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
-    if err != nil || otp.Code != req.Code {
-        c.JSON(400, gin.H{"error": "Invalid OTP"})
-        return
-    }
+	var otp models.OTP
+	err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
+	if err != nil || otp.Code != req.Code {
+		c.JSON(400, gin.H{"error": "Invalid OTP"})
+		return
+	}
 
-    _, err = usersCollection.UpdateOne(ctx,
-        bson.M{"email": req.Email},
-        bson.M{"$set": bson.M{"verified": true}},
-    )
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to update user status"})
-        return
-    }
+	// For email verification, update user status and delete OTP
+	if !req.IsPasswordReset {
+		_, err = usersCollection.UpdateOne(ctx,
+			bson.M{"email": req.Email},
+			bson.M{"$set": bson.M{"verified": true}},
+		)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to update user status"})
+			return
+		}
 
-    _, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
-    c.JSON(200, gin.H{"message": "Email verified"})
+		_, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
+	}
+
+	c.JSON(200, gin.H{"message": "OTP verified"})
 }
 
 // Login
-// Login (email OR username)
 func Login(c *gin.Context) {
 	var req struct {
 		Identifier string `json:"identifier"` // email or username
@@ -148,82 +185,90 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, _ := utils.GenerateJWT(user.ID.Hex(), user.Username, user.Avatar, user.Role)
+	token, _ := utils.GenerateJWT(user.ID.Hex(), user.Username, user.AvatarURL, user.Role)
 	c.JSON(200, gin.H{
 		"message": "Login successful",
 		"token":   token,
 	})
 }
+
 // Forgot Password (Send OTP)
 func ForgotPassword(c *gin.Context) {
-    var req struct {
-        Email string `json:"email"`
-    }
-    c.BindJSON(&req)
+	var req struct {
+		Email string `json:"email"`
+	}
+	c.BindJSON(&req)
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    usersCollection := config.DB.Collection("users")
-    otpsCollection := config.DB.Collection("otps")
+	usersCollection := config.DB.Collection("users")
+	otpsCollection := config.DB.Collection("otps")
 
-    var user models.User
-    err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&user)
-    if err != nil {
-        c.JSON(404, gin.H{"error": "Email not found"})
-        return
-    }
+	var user models.User
+	err := usersCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&user)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "Email not found"})
+		return
+	}
 
-    otp := utils.GenerateOTP()
-    _, err = otpsCollection.UpdateOne(ctx,
-        bson.M{"email": req.Email},
-        bson.M{"$set": bson.M{"code": otp}},
-        options.Update().SetUpsert(true),
-    )
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to save OTP"})
-        return
-    }
+	// ลบ OTP เก่าก่อน
+	_, err = otpsCollection.DeleteMany(ctx, bson.M{"email": req.Email})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to delete old OTP"})
+		return
+	}
 
-    subject := "Reset Your Password"
-    body := fmt.Sprintf("Your OTP for resetting password is: %s", otp)
-    utils.SendEmail(req.Email, subject, body)
+	otp := utils.GenerateOTP()
+	_, err = otpsCollection.InsertOne(ctx, models.OTP{
+		Email: req.Email,
+		Code:  otp,
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to save OTP"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "OTP sent to email"})
+	subject := "Reset Your Password"
+	body := fmt.Sprintf("Your OTP for resetting password is: %s", otp)
+	utils.SendEmail(req.Email, subject, body)
+
+	c.JSON(200, gin.H{"message": "OTP sent to email"})
 }
 
 // Reset Password
 func ResetPassword(c *gin.Context) {
-    var req struct {
-        Email       string `json:"email"`
-        Code        string `json:"code"`
-        NewPassword string `json:"newPassword"`
-    }
-    c.BindJSON(&req)
+	var req struct {
+		Email       string `json:"email"`
+		Code        string `json:"code"`
+		NewPassword string `json:"newPassword"`
+	}
+	c.BindJSON(&req)
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    otpsCollection := config.DB.Collection("otps")
-    usersCollection := config.DB.Collection("users")
+	otpsCollection := config.DB.Collection("otps")
+	usersCollection := config.DB.Collection("users")
 
-    var otp models.OTP
-    err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
-    if err != nil || otp.Code != req.Code {
-        c.JSON(400, gin.H{"error": "Invalid OTP"})
-        return
-    }
+	var otp models.OTP
+	err := otpsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&otp)
+	if err != nil || otp.Code != req.Code {
+		c.JSON(400, gin.H{"error": "Invalid OTP"})
+		return
+	}
 
-    hashed, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-    _, err = usersCollection.UpdateOne(ctx,
-        bson.M{"email": req.Email},
-        bson.M{"$set": bson.M{"password": string(hashed)}},
-    )
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to update password"})
-        return
-    }
+	hashed, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	_, err = usersCollection.UpdateOne(ctx,
+		bson.M{"email": req.Email},
+		bson.M{"$set": bson.M{"password": string(hashed)}},
+	)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update password"})
+		return
+	}
 
-    _, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
-    c.JSON(200, gin.H{"message": "Password reset successful"})
+	// Only delete OTP after successful password reset
+	_, _ = otpsCollection.DeleteOne(ctx, bson.M{"email": req.Email})
+	c.JSON(200, gin.H{"message": "Password reset successful"})
 }

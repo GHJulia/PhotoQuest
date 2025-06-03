@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"photoquest/config"
 	"photoquest/models"
 	"photoquest/utils"
+
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Postman: it can post photo in gallery page now and also like and unlike
@@ -100,48 +101,48 @@ func ToggleLike(c *gin.Context) {
 // Share Button
 // POST /gallery/share
 func ShareGalleryPost(c *gin.Context) {
-    var req struct {
-        PostID string `json:"post_id"`
-        Email  string `json:"email"`
-    }
+	var req struct {
+		PostID string `json:"post_id"`
+		Email  string `json:"email"`
+	}
 
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-        return
-    }
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
 
-    // Convert to ObjectID
-    objectID, err := primitive.ObjectIDFromHex(req.PostID)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Post ID"})
-        return
-    }
+	// Convert to ObjectID
+	objectID, err := primitive.ObjectIDFromHex(req.PostID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Post ID"})
+		return
+	}
 
-    // Fetch the post
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-    var post models.GalleryPost
-    err = config.DB.Collection("gallery_posts").FindOne(ctx, bson.M{"_id": objectID}).Decode(&post)
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
-        return
-    }
+	// Fetch the post
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var post models.GalleryPost
+	err = config.DB.Collection("gallery_posts").FindOne(ctx, bson.M{"_id": objectID}).Decode(&post)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
 
-    // Compose shareable link
-    shareURL := fmt.Sprintf("https://photoquest.site/gallery/%s", req.PostID)
+	// Compose shareable link
+	shareURL := fmt.Sprintf("https://photoquest.site/gallery/%s", req.PostID)
 
-    // Email content
-    subject := "Check out this photo on PhotoQuest!"
-    body := fmt.Sprintf("Hi there! 👋\n\nSomeone shared a photo with you!\nClick to view: %s", shareURL)
+	// Email content
+	subject := "Check out this photo on PhotoQuest!"
+	body := fmt.Sprintf("Hi there! 👋\n\nSomeone shared a photo with you!\nClick to view: %s", shareURL)
 
-    // Send the email
-    err = utils.SendEmail(req.Email, subject, body)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send email"})
-        return
-    }
+	// Send the email
+	err = utils.SendEmail(req.Email, subject, body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send email"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Share link sent to email"})
+	c.JSON(http.StatusOK, gin.H{"message": "Share link sent to email"})
 }
 
 // Photo Detail Page: Get each post id that user click to show only one
@@ -181,9 +182,9 @@ func GetGalleryPostByID(c *gin.Context) {
 // POST /gallery/answer
 func SubmitAnswer(c *gin.Context) {
 	type AnswerRequest struct {
-		PostID  string `json:"post_id"`
-		UserID  string `json:"user_id"`
-		Answer  string `json:"answer"`
+		PostID string `json:"post_id"`
+		UserID string `json:"user_id"`
+		Answer string `json:"answer"`
 	}
 
 	var req AnswerRequest
@@ -248,8 +249,8 @@ func SubmitAnswer(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"correct":  isCorrect,
+		"correct":       isCorrect,
 		"correctAnswer": post.Choices[post.CorrectIndex],
-		"message":  "Answer submitted",
+		"message":       "Answer submitted",
 	})
 }

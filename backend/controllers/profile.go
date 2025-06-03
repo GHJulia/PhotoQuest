@@ -40,35 +40,113 @@ func UpdateProfile(c *gin.Context) {
 	userID := c.MustGet("user_id").(string)
 	objID, _ := primitive.ObjectIDFromHex(userID)
 
-	var updateData models.User
-	if err := c.BindJSON(&updateData); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request"})
-		return
-	}
-
-	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(updateData.Password), bcrypt.DefaultCost)
+	// Get current user data
+	var currentUser models.User
+	err := config.DB.Collection("users").FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&currentUser)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to hash password"})
+		c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
 		return
 	}
 
+	// Bind request data
+	var req struct {
+		Name            string `json:"name"`
+		Surname         string `json:"surname"`
+		Username        string `json:"username"`
+		Email           string `json:"email"`
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	// Validate required fields
+	if req.Name == "" || req.Surname == "" || req.Username == "" || req.Email == "" {
+		c.JSON(400, gin.H{"error": "กรุณากรอกข้อมูลให้ครบถ้วน"})
+		return
+	}
+
+	// Check if username is already taken (excluding current user)
+	var existingUser models.User
+	err = config.DB.Collection("users").FindOne(context.TODO(), bson.M{
+		"username": req.Username,
+		"_id":      bson.M{"$ne": objID},
+	}).Decode(&existingUser)
+	if err == nil {
+		c.JSON(400, gin.H{"error": "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว"})
+		return
+	}
+
+	// Check if email is already taken (excluding current user)
+	err = config.DB.Collection("users").FindOne(context.TODO(), bson.M{
+		"email": req.Email,
+		"_id":   bson.M{"$ne": objID},
+	}).Decode(&existingUser)
+	if err == nil {
+		c.JSON(400, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+		return
+	}
+
+	// Prepare update data
 	update := bson.M{
 		"$set": bson.M{
-			"name":      updateData.Name,
-			"surname":   updateData.Surname,
-			"username":  updateData.Username,
-			"email":     updateData.Email,
-			"password":  string(hashedPwd),
+			"name":     req.Name,
+			"surname":  req.Surname,
+			"username": req.Username,
+			"email":    req.Email,
 		},
 	}
 
-	_, err = config.DB.Collection("users").UpdateByID(context.TODO(), objID, update)
+	// Handle password update if provided
+	if req.NewPassword != "" {
+		// Verify current password
+		if req.CurrentPassword == "" {
+			c.JSON(400, gin.H{"error": "กรุณากรอกรหัสผ่านปัจจุบัน"})
+			return
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(currentUser.Password), []byte(req.CurrentPassword)); err != nil {
+			c.JSON(401, gin.H{"error": "รหัสผ่านปัจจุบันไม่ถูกต้อง"})
+			return
+		}
+
+		// Hash new password
+		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน"})
+			return
+		}
+
+		update["$set"].(bson.M)["password"] = string(hashedPwd)
+	}
+
+	// Update user
+	result, err := config.DB.Collection("users").UpdateByID(context.TODO(), objID, update)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to update profile"})
+		c.JSON(500, gin.H{"error": "ไม่สามารถอัพเดทข้อมูลได้"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Profile updated"})
+	if result.ModifiedCount == 0 {
+		c.JSON(400, gin.H{"error": "ไม่มีการเปลี่ยนแปลงข้อมูล"})
+		return
+	}
+
+	// Get updated user data
+	var updatedUser models.User
+	err = config.DB.Collection("users").FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&updatedUser)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "ไม่สามารถดึงข้อมูลที่อัพเดทได้"})
+		return
+	}
+
+	updatedUser.Password = "" // hide password
+	c.JSON(200, gin.H{
+		"message": "อัพเดทข้อมูลสำเร็จ",
+		"user":    updatedUser,
+	})
 }
 
 func UploadAvatar(c *gin.Context) {
@@ -95,6 +173,7 @@ func UploadAvatar(c *gin.Context) {
 		return
 	}
 
+	// Update user's avatar URL
 	_, err = config.DB.Collection("users").UpdateByID(context.TODO(), objID, bson.M{
 		"$set": bson.M{"avatar_url": avatarURL},
 	})
@@ -103,7 +182,19 @@ func UploadAvatar(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Avatar updated", "url": avatarURL})
+	// Get updated user data
+	var user models.User
+	err = config.DB.Collection("users").FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&user)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get updated user data"})
+		return
+	}
+
+	user.Password = "" // hide password
+	c.JSON(200, gin.H{
+		"message": "Avatar updated",
+		"user":    user,
+	})
 }
 
 func uploadToS3(fileData []byte, filename string, fileHeader *multipart.FileHeader) (string, error) {

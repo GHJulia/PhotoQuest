@@ -19,9 +19,9 @@ func GetLeaderboard(c *gin.Context) {
 	findOptions := options.Find()
 	findOptions.SetSort(bson.D{{Key: "total_score", Value: -1}})
 	findOptions.SetProjection(bson.M{
-		"username":     1,
-		"avatar":       1,
-		"total_score":  1,
+		"username":    1,
+		"avatar_url":  1,
+		"total_score": 1,
 	})
 
 	cursor, err := config.DB.Collection("users").Find(ctx, bson.M{}, findOptions)
@@ -42,7 +42,7 @@ func GetLeaderboard(c *gin.Context) {
 		leaderboard = append(leaderboard, gin.H{
 			"rank":        i + 1,
 			"username":    user.Username,
-			"avatar":      user.Avatar,
+			"avatar_url":  user.AvatarURL,
 			"total_score": user.TotalScore,
 		})
 	}

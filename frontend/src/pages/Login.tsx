@@ -1,17 +1,42 @@
-
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, Key, LogIn } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from '../components/ui/sonner';
 
 const Login = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.email) {
+      setFormData(prev => ({ ...prev, email: location.state.email }));
+    }
+    if (location.state?.message) {
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Success
+          </div>
+          <div className="text-sm text-gray-800">{location.state.message}</div>
+        </div>
+      );
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -20,9 +45,65 @@ const Login = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login submitted:', formData);
+    if (loading) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8081/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          identifier: formData.email,
+          password: formData.password
+        })
+      });
+
+      const result = await res.json();
+      if (res.ok && result.token) {
+        await login(formData.email, formData.password);
+        toast(
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+              <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Success
+            </div>
+            <div className="text-sm text-gray-800">Login successful!</div>
+          </div>
+        );
+      } else {
+        toast(
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Error
+            </div>
+            <div className="text-sm text-gray-800">{result.error || "Invalid email or password"}</div>
+          </div>
+        );
+      }
+    } catch (error) {
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Failed to login. Please try again later.</div>
+        </div>
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -32,8 +113,8 @@ const Login = () => {
           <div className="mx-auto w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mb-4">
             <LogIn className="w-10 h-10 text-white" />
           </div>
-          <CardTitle className="text-3xl font-bold text-orange-800 mb-2">Welcome Back</CardTitle>
-          <p className="text-orange-600 text-sm">Sign in to your Photo Quest account</p>
+          <CardTitle className="text-3xl font-bold text-orange-800 mb-2">Sign In</CardTitle>
+          <p className="text-orange-600 text-sm px-4">Welcome back! Please enter your details</p>
         </CardHeader>
         <CardContent className="space-y-4 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -50,6 +131,7 @@ const Login = () => {
                   onChange={handleChange}
                   className="pl-10 h-12 bg-orange-50/50 border-orange-200 focus:border-orange-400 focus:ring-orange-400 rounded-xl"
                   placeholder="Enter your email"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -67,6 +149,7 @@ const Login = () => {
                   onChange={handleChange}
                   className="pl-10 h-12 bg-orange-50/50 border-orange-200 focus:border-orange-400 focus:ring-orange-400 rounded-xl"
                   placeholder="Enter your password"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -80,8 +163,9 @@ const Login = () => {
             <Button 
               type="submit" 
               className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+              disabled={loading}
             >
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 

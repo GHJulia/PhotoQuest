@@ -1,39 +1,63 @@
 package main
 
 import (
-    "log"
-    "github.com/gin-gonic/gin"
-    "github.com/joho/godotenv"
-    "github.com/gin-contrib/cors"
+	"log"
+	"os"
 
-    "photoquest/config"
-    "photoquest/routes"
-    "photoquest/middleware"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+
+	"photoquest/config"
+	middlewares "photoquest/middleware"
+	"photoquest/models"
+	"photoquest/routes"
 )
 
 func main() {
-    // Load .env
-    if err := godotenv.Load(); err != nil {
-        log.Fatal("Error loading .env file")
-    }
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
-    config.ConnectDB()
-    
-    r := gin.Default()
-    r.Use(cors.Default())
+	// Initialize MongoDB connection
+	config.ConnectDB()
 
-    // Auth routes don’t need token
-    routes.AuthRoutes(r)
+	// Initialize collections and indexes
+	userAnswer := &models.UserAnswer{}
+	userAnswer.Initialize()
 
-    // All routes below need JWT
-	protected := r.Group("/")
+	// Create Gin router
+	router := gin.Default()
+
+	// Configure CORS
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
+
+	// Auth routes don't need token
+	routes.AuthRoutes(router)
+
+	// All routes below need JWT
+	protected := router.Group("/")
 	protected.Use(middlewares.JWTAuthMiddleware())
-    routes.ProfileRoutes(protected)
-    routes.MyPhotosRoutes(protected)
+	routes.ProfileRoutes(protected)
+	routes.MyPhotosRoutes(protected)
 	routes.ChallengeRoutes(protected)
 	routes.GalleryRoutes(protected)
-    routes.LeaderboardRoutes(protected)
-    routes.AdminRoutes(protected)
+	routes.LeaderboardRoutes(protected)
+	routes.AdminRoutes(protected)
 
-    r.Run(":8081") // API runs at localhost:8080
+	// Start server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
+	}
+	router.Run(":" + port)
 }
