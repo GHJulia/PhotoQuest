@@ -58,13 +58,10 @@ const Admin = () => {
         throw new Error('No data received from the server');
       }
 
-      console.log('Raw backend response:', usersRes.data);
-
       // Transform users data to match frontend interface
       const transformedUsers = usersRes.data.map((user: any) => {
         const id = user.id || user._id || user._id?.$oid || '';
-        console.log('Processing user:', user);
-
+        
         // Handle case where surname might be part of name field
         let name = user.name || '';
         let surname = user.surname || '';
@@ -76,21 +73,29 @@ const Admin = () => {
           surname = nameParts.slice(1).join(' ');
         }
 
-        const transformed = {
+        return {
           id,
-          name: name,
-          surname: surname,
+          name,
+          surname,
           email: user.email,
           join_date: user.join_date,
           points: user.points || 0
         };
-        console.log('Transformed user data:', transformed);
-        return transformed;
       });
 
-      console.log('Final transformed users:', transformedUsers);
       setUsers(transformedUsers);
-      setChallenges(tasksRes.data);
+
+      // Transform tasks data to match frontend interface
+      const transformedTasks = tasksRes.data.map((task: any) => ({
+        id: task.id || task._id || '',
+        task_description: task.task_description || task.prompt || '',
+        difficulty: (task.difficulty || task.mode || 'easy') as 'easy' | 'medium' | 'hard',
+        points: task.points || 100,
+        created_date: task.created_date || new Date().toLocaleDateString(),
+        status: (task.status || 'active') as 'active' | 'inactive'
+      }));
+
+      setChallenges(transformedTasks);
     } catch (err: any) {
       console.error('Error fetching data:', err);
       const errorMessage = err.response 
@@ -177,10 +182,34 @@ const Admin = () => {
 
   const updateTask = async (id: string, updatedTask: Partial<Challenge>) => {
     try {
-      await axios.put(`/admin/tasks/${id}`, updatedTask);
-      await fetchData();
+      // Transform the data to match the backend API structure
+      const payload = {
+        prompt: updatedTask.task_description,
+        mode: updatedTask.difficulty,
+        status: updatedTask.status,
+        points: updatedTask.points
+      };
+
+      await axios.put(`/admin/tasks/${id}`, payload);
+      
+      // Update the local state with the new data
+      setChallenges(prev => prev.map(challenge => 
+        challenge.id === id 
+          ? {
+              ...challenge,
+              task_description: updatedTask.task_description || challenge.task_description,
+              difficulty: updatedTask.difficulty || challenge.difficulty,
+              status: updatedTask.status || challenge.status,
+              points: updatedTask.points || challenge.points
+            }
+          : challenge
+      ));
+
+      setSelectedTask(null);
+      alert('Task updated successfully!');
     } catch (err) {
       console.error('Error updating task:', err);
+      alert('Failed to update task. Please try again.');
     }
   };
 
@@ -265,7 +294,7 @@ const Admin = () => {
                             )
                             .map((user) => (
                               <TableRow key={user.id} className="hover:bg-orange-50">
-                                <TableCell className="py-4">
+                                <TableCell>
                                   <div className="flex items-center gap-2">
                                     <Users className="h-4 w-4 text-gray-400" />
                                     <span className="font-medium">{user.name || 'No name'}</span>
@@ -401,14 +430,7 @@ const Admin = () => {
                       />
                     </div>
                     <Button 
-                      onClick={() => setSelectedTask({ 
-                        id: '', 
-                        task_description: '', 
-                        difficulty: 'easy',
-                        points: 100,
-                        created_date: new Date().toISOString(),
-                        status: 'active'
-                      })}
+                      onClick={() => navigate('/admin/challenges/new')}
                       className="bg-orange-500 hover:bg-orange-600"
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -448,9 +470,11 @@ const Admin = () => {
                                     {task.difficulty}
                                   </span>
                                 </TableCell>
-                                <TableCell className="flex items-center gap-2 py-4">
-                                  <Star className="h-4 w-4 text-gray-400" />
-                                  <span className="align-middle">{task.points}</span>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Trophy className="h-4 w-4 text-gray-400" />
+                                    <span>{task.points}</span>
+                                  </div>
                                 </TableCell>
                                 <TableCell>{task.created_date}</TableCell>
                                 <TableCell>
@@ -497,21 +521,20 @@ const Admin = () => {
         <Footer />
 
         {/* Modals */}
-      {selectedUser && (
-        <EditUserModal
-          user={selectedUser}
-          onClose={() => setSelectedUser(null)}
-          onSave={(updatedData) => updateUser(selectedUser.id, updatedData)}
-        />
-      )}
-      {selectedTask && (
-        <EditTaskModal
-          task={selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onSave={updateTask}
-        />
-      )}
-
+        {selectedUser && (
+          <EditUserModal
+            user={selectedUser}
+            onClose={() => setSelectedUser(null)}
+            onSave={(updatedData) => updateUser(selectedUser.id, updatedData)}
+          />
+        )}
+        {selectedTask && (
+          <EditTaskModal
+            task={selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onSave={updateTask}
+          />
+        )}
       </div>
     </div>
   );

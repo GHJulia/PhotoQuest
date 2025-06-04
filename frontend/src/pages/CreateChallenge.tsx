@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,13 +27,15 @@ const CreateChallenge = () => {
     if (!difficulty || !task.trim()) return;
 
     try {
-      await axios.post('http://localhost:8081/admin/tasks', {
+      await axios.post('/admin/tasks', {
         prompt: task.trim(),
         mode: difficulty
       });
+      alert('Task created successfully!');
       navigate('/admin');
     } catch (err) {
       console.error('Error creating task:', err);
+      alert('Failed to create task. Please try again.');
     }
   };
 
