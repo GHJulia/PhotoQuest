@@ -1,71 +1,145 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import React, { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import axios from '@/lib/axios';
 
-interface EditUserModalProps {
-  open: boolean;
-  onClose: () => void;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    points: number;
-  };
-  onUpdate: () => void;
+interface User {
+  id: string;
+  name: string;
+  surname?: string;
+  email: string;
+  join_date: string;
+  points: number;
 }
 
-const EditUserModal: React.FC<EditUserModalProps> = ({ open, onClose, user, onUpdate }) => {
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const [points, setPoints] = useState(user.points);
+interface EditUserModalProps {
+  user: User;
+  onClose: () => void;
+  onSave: (updatedData: Partial<User>) => void;
+}
 
-  const handleSubmit = async () => {
-    try {
-      await axios.put(`/admin/users/${user.id}`, {
-        name,
-        email,
-        total_score: points
-      });
-      onUpdate();
-      onClose();
-    } catch (err) {
-      console.error('Error updating user:', err);
+export const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave }) => {
+  // Try to handle case where full name is in 'name' and surname is missing
+  const inferredName = !user.surname && user.name?.includes(' ')
+    ? user.name.split(' ')[0]
+    : user.name;
+
+  const inferredSurname = !user.surname && user.name?.includes(' ')
+    ? user.name.split(' ').slice(1).join(' ')
+    : user.surname || '';
+
+  const [formData, setFormData] = useState({
+    name: inferredName || '',
+    surname: inferredSurname || '',
+    email: user.email || '',
+    points: user.points || 0,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      alert('First name is required');
+      return;
     }
+    if (!formData.email.trim()) {
+      alert('Email is required');
+      return;
+    }
+    if (formData.points < 0) {
+      alert('Points cannot be negative');
+      return;
+    }
+
+    if (!user.id) {
+      alert('Invalid user ID');
+      return;
+    }
+
+    onSave({
+      id: user.id,
+      name: formData.name.trim(),
+      surname: formData.surname.trim(),
+      email: formData.email.trim(),
+      points: Math.max(0, Number(formData.points)),
+    });
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'points' ? Number(value) : value
+    }));
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-4">
-          <div>
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                placeholder="Enter name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="surname">Surname</Label>
+              <Input
+                id="surname"
+                name="surname"
+                value={formData.surname}
+                onChange={handleInputChange}
+                placeholder="Enter surname"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="points">Points</Label>
+              <Input
+                id="points"
+                name="points"
+                type="number"
+                min="0"
+                value={formData.points}
+                onChange={handleInputChange}
+                placeholder="Enter points"
+              />
+            </div>
           </div>
-          <div>
-            <Label>Email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <Label>Points</Label>
-            <Input type="number" value={points} onChange={(e) => setPoints(Number(e.target.value))} />
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button onClick={handleSubmit} className="bg-orange-500 text-white">
-            Save Changes
-          </Button>
-        </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit">Save changes</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
 };
-
-export default EditUserModal;

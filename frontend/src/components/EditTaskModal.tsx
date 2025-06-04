@@ -3,11 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Challenge } from '@/types';
 import axios from '@/lib/axios';
 
 interface EditTaskModalProps {
-  open: boolean;
-  onClose: () => void;
   task: {
     id: string;
     task_description: string;
@@ -15,10 +14,11 @@ interface EditTaskModalProps {
     status: string;
     points: number;
   };
-  onUpdate: () => void;
+  onClose: () => void;
+  onSave: (id: string, updatedTask: Partial<Challenge>) => Promise<void>;
 }
 
-const EditTaskModal: React.FC<EditTaskModalProps> = ({ open, onClose, task, onUpdate }) => {
+const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose, onSave }) => {
   const [desc, setDesc] = useState(task.task_description);
   const [difficulty, setDifficulty] = useState(task.difficulty);
   const [status, setStatus] = useState(task.status);
@@ -26,13 +26,12 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ open, onClose, task, onUp
 
   const handleSubmit = async () => {
     try {
-      await axios.put(`/admin/tasks/${task.id}`, {
-        prompt: desc,
-        mode: difficulty,
+      await onSave(task.id, {
+        task_description: desc,
+        difficulty,
         status,
         points
       });
-      onUpdate();
       onClose();
     } catch (err) {
       console.error('Error updating task:', err);
@@ -40,7 +39,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ open, onClose, task, onUp
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Task</DialogTitle>

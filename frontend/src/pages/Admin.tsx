@@ -28,25 +28,9 @@ import {
 } from 'lucide-react';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
-import EditUserModal from '@/components/EditUserModal';
+import { EditUserModal } from '@/components/EditUserModal';
 import EditTaskModal from '@/components/EditTaskModal';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  join_date: string;
-  points: number;
-}
-
-interface Challenge {
-  id: string;
-  task_description: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  points: number;
-  created_date: string;
-  status: 'active' | 'inactive';
-}
+import { User, Challenge } from '@/types';
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -70,49 +54,114 @@ const Admin = () => {
         axios.get('/admin/tasks')
       ]);
 
+      if (!usersRes.data || !tasksRes.data) {
+        throw new Error('No data received from the server');
+      }
+
+      console.log('Raw backend response:', usersRes.data);
+
       // Transform users data to match frontend interface
-      const transformedUsers = usersRes.data.map((user: any) => ({
-        id: user._id || '', // MongoDB ID
-        name: user.name ? `${user.name} ${user.surname || ''}`.trim() : '',
-        email: user.email || '',
-        join_date: formatDate(user.ID?.timestamp || new Date()),
-        points: user.TotalScore || 0
-      }));
+      const transformedUsers = usersRes.data.map((user: any) => {
+        const id = user.id || user._id || user._id?.$oid || '';
+        console.log('Processing user:', user);
 
-      // Transform tasks data to match frontend interface
-      const transformedTasks = tasksRes.data.map((task: any) => ({
-        id: task.id || '',
-        task_description: task.task_description || '',
-        difficulty: task.difficulty || 'easy',
-        points: task.points || 0,
-        created_date: task.created_date || '',
-        status: task.status || 'active'
-      }));
+        // Handle case where surname might be part of name field
+        let name = user.name || '';
+        let surname = user.surname || '';
 
+        // If there's no surname but name contains a space, split it
+        if (!surname && name.includes(' ')) {
+          const nameParts = name.split(' ');
+          name = nameParts[0];
+          surname = nameParts.slice(1).join(' ');
+        }
+
+        const transformed = {
+          id,
+          name: name,
+          surname: surname,
+          email: user.email,
+          join_date: user.join_date,
+          points: user.points || 0
+        };
+        console.log('Transformed user data:', transformed);
+        return transformed;
+      });
+
+      console.log('Final transformed users:', transformedUsers);
       setUsers(transformedUsers);
-      setChallenges(transformedTasks);
-    } catch (err) {
+      setChallenges(tasksRes.data);
+    } catch (err: any) {
       console.error('Error fetching data:', err);
-      // Add error toast or notification here
+      const errorMessage = err.response 
+        ? `Server error: ${err.response.status} - ${err.response.statusText}`
+        : err.message === 'Network Error'
+        ? 'Cannot connect to the server. Please make sure the backend is running.'
+        : 'Failed to load data. Please try again.';
+      
+      alert(errorMessage);
     }
   };
 
   const deleteUser = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
+    
     try {
       await axios.delete(`/admin/users/${id}`);
-      setUsers(prev => prev.filter(u => u.id !== id));
-    } catch (err) {
-      console.error('Error deleting user:', err);
+      // Remove user from the state
+      setUsers(prev => prev.filter(user => user.id !== id));
+      alert('User deleted successfully');
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Failed to delete user. Please try again.');
     }
   };
 
-  const updateUser = async (id: string, updatedUser: Partial<User>) => {
+  const updateUser = async (id: string, updatedData: Partial<User>) => {
     try {
-      await axios.put(`/admin/users/${id}`, updatedUser);
-      await fetchData();
-    } catch (err) {
-      console.error('Error updating user:', err);
+      console.log('Updating user with ID:', id);
+      console.log('Update data:', updatedData);
+      
+      // Transform the data to match the backend API structure
+      const payload = {
+        name: updatedData.name,
+        surname: updatedData.surname,
+        email: updatedData.email,
+        total_score: updatedData.points,
+        id: id
+      };
+
+
+      console.log('Sending payload to backend:', payload);
+
+      const response = await axios.put(`/admin/users/${id}`, payload);
+      
+      if (response.data) {
+        console.log('Update successful:', response.data);
+        
+        // Update the user in the local state
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user.id === id 
+              ? { 
+                  ...user,
+                  name: updatedData.name || user.name,
+                  surname: updatedData.surname || user.surname,
+                  email: updatedData.email || user.email,
+                  points: updatedData.points || user.points
+                }
+              : user
+          )
+        );
+        
+        setSelectedUser(null);
+        alert('User updated successfully!');
+      }
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -199,17 +248,19 @@ const Admin = () => {
                       <Table>
                         <TableHeader className="bg-orange-50 sticky top-0">
                           <TableRow>
-                            <TableHead className="w-[25%]">Name</TableHead>
+                            <TableHead className="w-[20%]">Name</TableHead>
+                            <TableHead className="w-[20%]">Surname</TableHead>
                             <TableHead className="w-[25%]">Email</TableHead>
-                            <TableHead className="w-[20%]">Join Date</TableHead>
-                            <TableHead className="w-[15%]">Points</TableHead>
-                            <TableHead className="w-[15%] text-right">Actions</TableHead>
+                            <TableHead className="w-[15%]">Join Date</TableHead>
+                            <TableHead className="w-[10%]">Points</TableHead>
+                            <TableHead className="w-[10%] text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {users
                             .filter(user =>
-                              user.name.toLowerCase().includes(searchUser.toLowerCase()) ||
+                              (user.name?.toLowerCase() || '').includes(searchUser.toLowerCase()) ||
+                              (user.surname?.toLowerCase() || '').includes(searchUser.toLowerCase()) ||
                               user.email.toLowerCase().includes(searchUser.toLowerCase())
                             )
                             .map((user) => (
@@ -218,6 +269,12 @@ const Admin = () => {
                                   <div className="flex items-center gap-2">
                                     <Users className="h-4 w-4 text-gray-400" />
                                     <span className="font-medium">{user.name || 'No name'}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    <span>{user.surname || '-'}</span>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -243,7 +300,17 @@ const Admin = () => {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => setSelectedUser(user)}
+                                      onClick={() => {
+                                        console.log('Setting selected user:', user);
+                                        setSelectedUser({
+                                          id: user.id,
+                                          name: user.name,
+                                          surname: user.surname,
+                                          email: user.email,
+                                          points: user.points,
+                                          join_date: user.join_date
+                                        });
+                                      }}
                                       className="hover:bg-blue-100"
                                     >
                                       <Edit className="h-4 w-4 text-blue-600" />
@@ -434,7 +501,7 @@ const Admin = () => {
         <EditUserModal
           user={selectedUser}
           onClose={() => setSelectedUser(null)}
-          onSave={updateUser}
+          onSave={(updatedData) => updateUser(selectedUser.id, updatedData)}
         />
       )}
       {selectedTask && (

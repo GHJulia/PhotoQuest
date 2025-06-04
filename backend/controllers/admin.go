@@ -1,15 +1,16 @@
 package controllers
 
 import (
-    "context"
-    "time"
+	"context"
+	"strings"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
-    "photoquest/config"
-    "photoquest/models"
+	"photoquest/config"
+	"photoquest/models"
 )
 
 // GET /admin/users – Fetch all users
@@ -31,15 +32,21 @@ func AdminDashboardUsers(c *gin.Context) {
 
 	var response []gin.H
 	for _, u := range users {
-		fullName := u.Name + " " + u.Surname
-		if u.Name == "" && u.Surname == "" {
-			fullName = "" // fallback in case both are blank
-		}
-
 		joinDate := u.ID.Timestamp().Format("January 2, 2006")
 
+		// Split full name into name and surname if needed
+		name := u.Name
+		surname := u.Surname
+		if surname == "" && strings.Contains(name, " ") {
+			parts := strings.SplitN(name, " ", 2)
+			name = parts[0]
+			surname = parts[1]
+		}
+
 		response = append(response, gin.H{
-			"name":      fullName,
+			"id":        u.ID.Hex(),
+			"name":      name,
+			"surname":   surname,
 			"email":     u.Email,
 			"join_date": joinDate,
 			"points":    u.TotalScore,
@@ -52,65 +59,65 @@ func AdminDashboardUsers(c *gin.Context) {
 // Edit User by ID
 // PUT /admin/users/:id
 func EditUserByID(c *gin.Context) {
-    userID := c.Param("id")
-    oid, err := primitive.ObjectIDFromHex(userID)
-    if err != nil {
-        c.JSON(400, gin.H{"error": "Invalid user ID"})
-        return
-    }
+	userID := c.Param("id")
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-    var updateData struct {
-        Name       string `json:"name"`
-        Surname    string `json:"surname"`
-        Email      string `json:"email"`
-        TotalScore int    `json:"total_score"`
-    }
+	var updateData struct {
+		Name       string `json:"name"`
+		Surname    string `json:"surname"`
+		Email      string `json:"email"`
+		TotalScore int    `json:"total_score"`
+	}
 
-    if err := c.BindJSON(&updateData); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid input"})
-        return
-    }
+	if err := c.BindJSON(&updateData); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid input"})
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    update := bson.M{
-        "$set": bson.M{
-            "name":        updateData.Name,
-            "surname":     updateData.Surname,
-            "email":       updateData.Email,
-            "total_score": updateData.TotalScore,
-        },
-    }
+	update := bson.M{
+		"$set": bson.M{
+			"name":        updateData.Name,
+			"surname":     updateData.Surname,
+			"email":       updateData.Email,
+			"total_score": updateData.TotalScore,
+		},
+	}
 
-    _, err = config.DB.Collection("users").UpdateOne(ctx, bson.M{"_id": oid}, update)
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to update user"})
-        return
-    }
+	_, err = config.DB.Collection("users").UpdateOne(ctx, bson.M{"_id": oid}, update)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update user"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "User updated"})
+	c.JSON(200, gin.H{"message": "User updated"})
 }
 
 // DELETE /admin/users/:id – Delete user by ID
 func DeleteUserByID(c *gin.Context) {
-    userID := c.Param("id")
-    oid, err := primitive.ObjectIDFromHex(userID)
-    if err != nil {
-        c.JSON(400, gin.H{"error": "Invalid user ID"})
-        return
-    }
+	userID := c.Param("id")
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    _, err = config.DB.Collection("users").DeleteOne(ctx, bson.M{"_id": oid})
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to delete user"})
-        return
-    }
+	_, err = config.DB.Collection("users").DeleteOne(ctx, bson.M{"_id": oid})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to delete user"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "User deleted"})
+	c.JSON(200, gin.H{"message": "User deleted"})
 }
 
 // GET /admin/tasks – Fetch all challenges/tasks
@@ -166,7 +173,7 @@ func CreatePhotographyTask(c *gin.Context) {
 	newTask := models.Challenge{
 		Prompt:    input.Prompt,
 		Mode:      input.Mode,
-		Points:    100, // Default
+		Points:    100,      // Default
 		Status:    "active", // Default
 		CreatedAt: primitive.NewDateTimeFromTime(time.Now()),
 	}
@@ -186,69 +193,68 @@ func CreatePhotographyTask(c *gin.Context) {
 // Edit Task by ID
 // PUT /admin/tasks/:id
 func EditTaskByID(c *gin.Context) {
-    taskID := c.Param("id")
-    oid, err := primitive.ObjectIDFromHex(taskID)
-    if err != nil {
-        c.JSON(400, gin.H{"error": "Invalid task ID"})
-        return
-    }
+	taskID := c.Param("id")
+	oid, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid task ID"})
+		return
+	}
 
-    var updateData struct {
-        Prompt string `json:"prompt"`
-        Mode   string `json:"mode"`
-        Status string `json:"status"`
-        Points int    `json:"points"`
-    }
+	var updateData struct {
+		Prompt string `json:"prompt"`
+		Mode   string `json:"mode"`
+		Status string `json:"status"`
+		Points int    `json:"points"`
+	}
 
-    if err := c.BindJSON(&updateData); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid input"})
-        return
-    }
+	if err := c.BindJSON(&updateData); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid input"})
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    update := bson.M{
-        "$set": bson.M{
-            "prompt": updateData.Prompt,
-            "mode":   updateData.Mode,
-            "status": updateData.Status,
-            "points": updateData.Points,
-        },
-    }
+	update := bson.M{
+		"$set": bson.M{
+			"prompt": updateData.Prompt,
+			"mode":   updateData.Mode,
+			"status": updateData.Status,
+			"points": updateData.Points,
+		},
+	}
 
-    res, err := config.DB.Collection("challenges").UpdateOne(ctx, bson.M{"_id": oid}, update)
-    if err != nil {
-        c.JSON(500, gin.H{
-            "error":          "Failed to update task",
-            "details":        err.Error(),
-            "matched_count":  res.MatchedCount,
-            "modified_count": res.ModifiedCount,
-        })
-        return
-    }
+	res, err := config.DB.Collection("challenges").UpdateOne(ctx, bson.M{"_id": oid}, update)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error":          "Failed to update task",
+			"details":        err.Error(),
+			"matched_count":  res.MatchedCount,
+			"modified_count": res.ModifiedCount,
+		})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "Task updated"})
+	c.JSON(200, gin.H{"message": "Task updated"})
 }
-
 
 // DELETE /admin/tasks/:id – Delete challenge by ID
 func DeleteTaskByID(c *gin.Context) {
-    id := c.Param("id")
-    oid, err := primitive.ObjectIDFromHex(id)
-    if err != nil {
-        c.JSON(400, gin.H{"error": "Invalid task ID"})
-        return
-    }
+	id := c.Param("id")
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid task ID"})
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    _, err = config.DB.Collection("challenges").DeleteOne(ctx, bson.M{"_id": oid})
-    if err != nil {
-        c.JSON(500, gin.H{"error": "Failed to delete task"})
-        return
-    }
+	_, err = config.DB.Collection("challenges").DeleteOne(ctx, bson.M{"_id": oid})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to delete task"})
+		return
+	}
 
-    c.JSON(200, gin.H{"message": "Task deleted"})
+	c.JSON(200, gin.H{"message": "Task deleted"})
 }

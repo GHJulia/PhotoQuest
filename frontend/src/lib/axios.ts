@@ -1,23 +1,40 @@
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: 'http://localhost:8081',
+const instance = axios.create({
+  baseURL: 'http://localhost:8081', // Your backend API URL
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: false, // Set to true if your backend uses cookies for auth
 });
 
-// ✅ Automatically add Bearer token from localStorage if exists
-api.interceptors.request.use(
+// Add a request interceptor to include the auth token
+instance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token && config.headers) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-export default api;
+// Add a response interceptor to handle errors
+instance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // Log the error details for debugging
+      console.error('API Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      });
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default instance;
