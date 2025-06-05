@@ -10,6 +10,7 @@ import Footer from '../components/Footer';
 import { toast } from '../components/ui/sonner';
 import React from 'react';
 import api from '../lib/axios';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 interface LocationState {
   challenge?: {
@@ -256,14 +257,9 @@ const CreateGuess = () => {
                     <label className="block text-sm font-medium text-orange-700 mb-2">
                       Question Type
                     </label>
-                    <select 
-                      value={questionType} 
-                      onChange={(e) => handleQuestionTypeChange(e.target.value as 'single' | 'multiple')}
-                      className="w-full p-2 border border-orange-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500"
-                    >
-                      <option value="single">Single Correct Answer</option>
-                      <option value="multiple">Multiple Correct Answers</option>
-                    </select>
+                    <div className="p-3 rounded-lg font-medium bg-orange-200 text-orange-800">
+                      Single Correct Answer
+                    </div>
                   </div>
                 </CardContent>
               </Card>
