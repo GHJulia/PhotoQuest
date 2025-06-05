@@ -154,6 +154,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { token } = response.data;
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+<<<<<<< Updated upstream
         
         // Load user data and get profile
         await refreshUser();
@@ -165,6 +166,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Handle redirection based on role
         if (profileResponse.data.role === 'admin') {
           navigate('/admin');
+=======
+        // Load user data
+        await refreshUser();
+        // Get the latest user data after refresh
+        const currentUser = await api.get('/profile');
+        // Redirect admin users to admin page, others to home
+        if (currentUser.data.role === 'admin') {
+          window.location.href = 'http://localhost:8080/admin';
+>>>>>>> Stashed changes
         } else {
           navigate('/');
         }
