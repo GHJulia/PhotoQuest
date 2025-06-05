@@ -1,5 +1,5 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -8,13 +8,26 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { user } = useAuth();
+  const { user, isLoading, refreshUser } = useAuth();
+  const location = useLocation();
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  useEffect(() => {
+    // Refresh user data when mounting protected route
+    refreshUser();
+  }, [refreshUser]);
+
+  if (isLoading) {
+    // You might want to show a loading spinner here
+    return <div>Loading...</div>;
   }
 
-  if (requireAdmin && !user.isAdmin) {
+  if (!user) {
+    // Redirect to login if not authenticated
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+
+  if (requireAdmin && user.role !== 'admin') {
+    // Redirect to home if not admin
     return <Navigate to="/" replace />;
   }
 

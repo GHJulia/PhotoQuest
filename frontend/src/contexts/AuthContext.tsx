@@ -154,9 +154,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { token } = response.data;
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        // โหลดข้อมูล user ใหม่ (ถ้ามี API แยกสำหรับดึง user profile)
+        
+        // Load user data and get profile
         await refreshUser();
-        navigate('/');
+        const profileResponse = await api.get('/profile');
+        
+        // Update user data in state and localStorage
+        updateUser(profileResponse.data);
+        
+        // Handle redirection based on role
+        if (profileResponse.data.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
       } else if (response.data.error) {
         throw new Error(response.data.error);
       } else {

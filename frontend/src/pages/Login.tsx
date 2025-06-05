@@ -7,6 +7,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, Key, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from '../components/ui/sonner';
+import { jwtDecode } from 'jwt-decode';
+
+interface DecodedToken {
+  role: string;
+  exp: number;
+  [key: string]: any;
+}
 
 const Login = () => {
   const location = useLocation();
@@ -63,8 +70,22 @@ const Login = () => {
       });
 
       const result = await res.json();
+      console.log('Login response:', result);
+
       if (res.ok && result.token) {
+        // Store token
+        localStorage.setItem('token', result.token);
+
+        // Decode token to get role
+        const decoded: DecodedToken = jwtDecode(result.token);
+        console.log('Decoded token:', decoded);
+        console.log('User role:', decoded.role);
+
+        localStorage.setItem('role', decoded.role || '');
+
+        // Login using context (if needed)
         await login(formData.email, formData.password);
+
         toast(
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
@@ -76,6 +97,15 @@ const Login = () => {
             <div className="text-sm text-gray-800">Login successful!</div>
           </div>
         );
+
+        // Redirect based on role
+        if (decoded.role === 'admin') {
+          console.log('Redirecting to admin page...');
+          navigate('/admin');
+        } else {
+          console.log('Redirecting to profile page...');
+          navigate('/profile');
+        }
       } else {
         toast(
           <div className="flex flex-col gap-1">
@@ -113,12 +143,8 @@ const Login = () => {
           <div className="mx-auto w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mb-4">
             <LogIn className="w-10 h-10 text-white" />
           </div>
-          <CardTitle className="text-3xl md:text-4xl lg:text-5xl font-bold text-orange-600 mb-3 tracking-tight">
-            Sign In
-          </CardTitle>
-          <p className="text-sm md:text-base text-orange-600/80 max-w-2xl mx-auto">
-            Welcome back! Please enter your details
-          </p>
+          <CardTitle className="text-3xl font-bold text-orange-800 mb-2">Sign In</CardTitle>
+          <p className="text-orange-600 text-sm px-4">Welcome back! Please enter your details</p>
         </CardHeader>
         <CardContent className="space-y-4 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">

@@ -21,12 +21,18 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle errors
+// Add response interceptor
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If login response contains token and user data
+    if (response.config.url === '/auth/login' && response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized error (e.g., redirect to login)
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
