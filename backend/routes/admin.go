@@ -1,26 +1,25 @@
 package routes
 
 import (
-    "photoquest/controllers"
-    "photoquest/middleware"
-    "github.com/gin-gonic/gin"
+	"photoquest/controllers"
+	middlewares "photoquest/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 func AdminRoutes(rg *gin.RouterGroup) {
-    admin := rg.Group("/admin")
-    admin.Use(middlewares.AdminOnly())
+	admin := rg.Group("/admin")
+	admin.Use(middlewares.AdminOnly())
 
-    // User Management
-    admin.GET("/users", controllers.AdminDashboardUsers)           // List users
-    admin.DELETE("/users/:id", controllers.DeleteUserByID)         // Delete user
+	// User Management
+	admin.GET("/users", controllers.GetAllUsers)
+	admin.DELETE("/users/:id", controllers.DeleteUserByID)
 
-    // Photography Tasks
-    admin.GET("/tasks", controllers.AdminDashboardTasks)           // List tasks
-    admin.POST("/tasks", controllers.CreatePhotographyTask)        // Create new task
-    admin.DELETE("/tasks/:id", controllers.DeleteTaskByID)         // Delete task
+	// Photography Tasks
+	admin.GET("/tasks", controllers.GetAllTasks)
+	admin.POST("/tasks", controllers.CreateTask)
+	admin.DELETE("/tasks/:id", controllers.DeleteTask)
 
-    admin.PUT("/users/:id", controllers.EditUserByID)
-    admin.PUT("/tasks/:id", controllers.EditTaskByID)
-
-
+	admin.PUT("/users/:id", controllers.EditUserByID)
+	admin.PUT("/tasks/:id", controllers.UpdateTask)
 }

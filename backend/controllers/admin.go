@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -257,4 +258,86 @@ func DeleteTaskByID(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "Task deleted"})
+}
+
+func GetAllUsers(c *gin.Context) {
+	var users []bson.M
+	cursor, err := config.DB.Collection("users").Find(context.TODO(), bson.M{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &users); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode users"})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
+}
+
+func GetAllTasks(c *gin.Context) {
+	var tasks []bson.M
+	cursor, err := config.DB.Collection("challenges").Find(context.TODO(), bson.M{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &tasks); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode tasks"})
+		return
+	}
+
+	c.JSON(http.StatusOK, tasks)
+}
+
+func CreateTask(c *gin.Context) {
+	var task bson.M
+	if err := c.ShouldBindJSON(&task); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := config.DB.Collection("challenges").InsertOne(context.TODO(), task)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create task"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"id": result.InsertedID})
+}
+
+func UpdateTask(c *gin.Context) {
+	id := c.Param("id")
+	var task bson.M
+	if err := c.ShouldBindJSON(&task); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err := config.DB.Collection("challenges").UpdateOne(
+		context.TODO(),
+		bson.M{"_id": id},
+		bson.M{"$set": task},
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update task"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task updated successfully"})
+}
+
+func DeleteTask(c *gin.Context) {
+	id := c.Param("id")
+	_, err := config.DB.Collection("challenges").DeleteOne(context.TODO(), bson.M{"_id": id})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete task"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task deleted successfully"})
 }
