@@ -1,5 +1,4 @@
-import React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -22,48 +21,54 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 
 const Profile = () => {
   const { user, updateUserData, logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [profileImage, setProfileImage] = useState<string | null>(user?.avatar_url || null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [formData, setFormData] = useState({
+  
+  // Initialize state with memoized initial values
+  const initialFormData = useMemo(() => ({
     name: user?.name || '',
     surname: user?.surname || '',
     username: user?.username || '',
     email: user?.email || '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
+  }), []); // Empty dependency array as this should only run once
 
+  const [profileImage, setProfileImage] = useState<string | null>(user?.avatar_url || null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [formData, setFormData] = useState(initialFormData);
+
+  // Update form data only when user ID changes
   useEffect(() => {
-    if (user) {
-      setFormData(prev => ({
-        ...prev,
+    if (user?.id) {
+      setFormData({
         name: user.name || '',
         surname: user.surname || '',
         username: user.username || '',
         email: user.email || ''
-      }));
+      });
       setProfileImage(user.avatar_url || null);
     }
-  }, [user]);
+  }, [user?.id]); // Only run when user ID changes
 
-  const stats = [
+  // Memoize stats to prevent unnecessary recalculations
+  const stats = useMemo(() => [
     { icon: Trophy, label: 'Total Score', value: user?.total_score || 0 },
     { icon: ImageIcon, label: 'Photos Uploaded', value: user?.stats?.totalPhotosUploaded || 0 },
     { icon: Heart, label: 'Likes Received', value: user?.stats?.totalLikesReceived || 0 }
-  ];
+  ], [user?.total_score, user?.stats?.totalPhotosUploaded, user?.stats?.totalLikesReceived]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Memoize handlers to prevent unnecessary re-renders
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
-  };
+  }, []); // No dependencies needed as it only uses setState
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,73 +115,57 @@ const Profile = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleProfileSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Validate password fields if attempting to change password
-      if (formData.newPassword || formData.currentPassword) {
-        if (!formData.currentPassword) {
-          toast.error("Current password required", {
-            description: "Please enter your current password to change password"
-          });
-          return;
-        }
-        if (!formData.newPassword) {
-          toast.error("New password required", {
-            description: "Please enter a new password"
-          });
-          return;
-        }
-        if (formData.newPassword !== formData.confirmPassword) {
-          toast.error("Passwords don't match", {
-            description: "Please make sure your new passwords match"
-          });
-          return;
-        }
-      }
-
-      // Prepare update data
-      const updateData = {
+      const trimmedData = {
         name: formData.name.trim(),
         surname: formData.surname.trim(),
         username: formData.username.trim(),
         email: formData.email.trim(),
-        ...(formData.newPassword ? {
-          current_password: formData.currentPassword,
-          new_password: formData.newPassword
-        } : {})
+        current_password: "",
+        new_password: ""
       };
 
-      // Validate required fields
-      if (!updateData.name || !updateData.surname || !updateData.username || !updateData.email) {
+      // Check if any required field is empty after trimming
+      if (!trimmedData.name || !trimmedData.surname || !trimmedData.username || !trimmedData.email) {
         toast.error("Missing required fields", {
           description: "Please fill in all required fields"
         });
         return;
       }
 
-      const response = await api.put('/profile', updateData);
+      // Check if any data has actually changed
+      if (
+        trimmedData.name === user?.name &&
+        trimmedData.surname === user?.surname &&
+        trimmedData.username === user?.username &&
+        trimmedData.email === user?.email
+      ) {
+        toast.info("No changes to save", {
+          description: "You haven't made any changes to your profile"
+        });
+        setIsEditing(false);
+        return;
+      }
+
+      const response = await api.put('/profile', trimmedData);
       
       if (response.data.user) {
         updateUserData(response.data.user);
-        setFormData(prev => ({
-          ...prev,
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: ''
-        }));
         toast.success("Profile Updated", {
           description: "Your changes have been saved successfully"
         });
         setIsEditing(false);
       }
     } catch (error: any) {
+      console.error('Profile update error:', error.response || error);
       const errorMessage = error.response?.data?.error || "Please try again later";
       toast.error("Update failed", {
         description: errorMessage
       });
     }
-  };
+  }, [formData, user, updateUserData]); // Only depend on values needed for the function
 
   const handleDeleteAccount = async () => {
     try {
@@ -205,8 +194,8 @@ const Profile = () => {
           <p className="text-lg text-orange-600 font-medium">Manage your account and view your achievements</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8 mb-8">
-          {/* Profile Info Card */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Profile Info Card - Left Column */}
           <Card className="lg:col-span-1 bg-white/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-300 rounded-2xl border-orange-100">
             <CardContent className="p-8">
               <div className="relative mb-10">
@@ -258,49 +247,38 @@ const Profile = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 mb-10">
-                {stats.map((stat, index) => (
-                  <div 
-                    key={index} 
-                    className="bg-gradient-to-br from-white to-orange-50 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 border border-orange-100"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="bg-orange-100 rounded-lg p-2">
-                        <stat.icon className="h-6 w-6 text-orange-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-orange-600 font-medium mb-1">{stat.label}</p>
-                        <p className="text-2xl font-bold text-orange-800">{stat.value}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => setIsChangingPassword(true)}
+                  className="w-full flex items-center justify-center gap-2 bg-[#FF9B6A] hover:bg-[#FF8A50] text-white rounded-xl py-3"
+                >
+                  <Settings className="h-5 w-5" />
+                  Change Password
+                </Button>
+
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button 
-                      variant="destructive" 
-                      className="w-full bg-red-500 hover:bg-red-600 transition-colors duration-300"
+                    <Button
+                      variant="ghost"
+                      className="w-full flex items-center justify-center gap-2 bg-[#FF7070] hover:bg-[#FF5656] text-white rounded-xl py-3"
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
+                      <Trash2 className="h-5 w-5" />
                       Delete Account
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-white rounded-2xl p-6 shadow-2xl">
+                  <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle className="text-2xl font-bold text-red-600">Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription className="text-gray-600">
-                        This action cannot be undone. This will permanently delete your
-                        account and remove all your data from our servers.
+                      <AlertDialogTitle>Are you sure you want to delete your account?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete your account and remove your data from our servers.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="mt-6">
-                      <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
                         onClick={handleDeleteAccount}
-                        className="bg-red-500 hover:bg-red-600 text-white rounded-lg"
+                        className="bg-[#FF7070] hover:bg-[#FF5656] text-white"
                       >
                         Delete Account
                       </AlertDialogAction>
@@ -311,138 +289,146 @@ const Profile = () => {
             </CardContent>
           </Card>
 
-          {/* Profile Form */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-300 rounded-2xl border-orange-100">
-            <CardContent className="p-8">
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-3">
-                  <Settings className="h-7 w-7 text-orange-500" />
-                  <h2 className="text-2xl font-bold text-orange-800">Account Settings</h2>
+          {/* Right Column - Account Settings and Statistics */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            {/* Account Settings Card */}
+            <Card className="bg-white/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-300 rounded-2xl border-orange-100 h-fit">
+              <CardContent className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-3">
+                    <Settings className="h-7 w-7 text-orange-500" />
+                    <h2 className="text-2xl font-bold text-orange-800">Account Settings</h2>
+                  </div>
+                  <div className="flex gap-4">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setIsEditing(false);
+                            // Reset form data to current user data
+                            setFormData(initialFormData);
+                          }}
+                          className="bg-gray-100 text-gray-600 hover:text-gray-700 hover:bg-gray-200 rounded-lg px-4 py-2"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          form="profile-form"
+                          className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-lg px-4 py-2"
+                        >
+                          Save Changes
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setIsEditing(true)}
+                        className="bg-orange-100 text-orange-600 hover:text-orange-700 hover:bg-orange-200 rounded-lg px-4 py-2"
+                      >
+                        Edit Profile
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  onClick={() => setIsEditing(!isEditing)}
-                  className="bg-orange-100 text-orange-600 hover:text-orange-700 hover:bg-orange-200 rounded-lg px-4 py-2"
-                >
-                  {isEditing ? 'Cancel' : 'Edit Profile'}
-                </Button>
-              </div>
-              
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
+                
+                <form id="profile-form" onSubmit={handleProfileSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name" className="text-orange-800 font-medium block mb-1.5">Name</Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        disabled={!isEditing}
+                        placeholder="Enter your name"
+                        className={`bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg ${!isEditing ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="surname" className="text-orange-800 font-medium block mb-1.5">Surname</Label>
+                      <Input
+                        id="surname"
+                        name="surname"
+                        value={formData.surname}
+                        onChange={handleChange}
+                        disabled={!isEditing}
+                        placeholder="Enter your surname"
+                        className={`bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg ${!isEditing ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <Label htmlFor="name" className="text-orange-800 font-medium block mb-2">Name</Label>
+                    <Label htmlFor="username" className="text-orange-800 font-medium block mb-1.5">Username</Label>
                     <Input
-                      id="name"
-                      name="name"
-                      value={formData.name}
+                      id="username"
+                      name="username"
+                      value={formData.username}
                       onChange={handleChange}
                       disabled={!isEditing}
-                      className="bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 disabled:opacity-70 rounded-lg"
+                      placeholder="Enter your username"
+                      className={`bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg ${!isEditing ? 'opacity-70 cursor-not-allowed' : ''}`}
                     />
                   </div>
+
                   <div>
-                    <Label htmlFor="surname" className="text-orange-800 font-medium block mb-2">Surname</Label>
+                    <Label htmlFor="email" className="text-orange-800 font-medium block mb-1.5">Email</Label>
                     <Input
-                      id="surname"
-                      name="surname"
-                      value={formData.surname}
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
                       onChange={handleChange}
                       disabled={!isEditing}
-                      className="bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 disabled:opacity-70 rounded-lg"
+                      placeholder="Enter your email"
+                      className={`bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg ${!isEditing ? 'opacity-70 cursor-not-allowed' : ''}`}
                     />
                   </div>
-                </div>
+                </form>
+              </CardContent>
+            </Card>
 
-                <div>
-                  <Label htmlFor="username" className="text-orange-800 font-medium block mb-2">Username</Label>
-                  <Input
-                    id="username"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 disabled:opacity-70 rounded-lg"
-                  />
+            {/* Statistics Card */}
+            <Card className="bg-white/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-300 rounded-2xl border-orange-100 h-fit">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Trophy className="h-7 w-7 text-orange-500" />
+                  <h2 className="text-2xl font-bold text-orange-800">Statistics</h2>
                 </div>
-
-                <div>
-                  <Label htmlFor="email" className="text-orange-800 font-medium block mb-2">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    disabled={!isEditing}
-                    className="bg-white/90 border-orange-200 focus:border-orange-500 focus:ring-orange-500 disabled:opacity-70 rounded-lg"
-                  />
-                </div>
-
-                {isEditing && (
-                  <>
-                    <Separator className="my-8 bg-orange-200" />
-                    <div className="bg-orange-50/50 rounded-xl p-6 border border-orange-200">
-                      <h3 className="text-xl font-bold text-orange-800 mb-6">Change Password</h3>
-                      
-                      <div className="space-y-5">
-                        <div>
-                          <Label htmlFor="currentPassword" className="text-orange-800 font-medium block mb-2">Current Password</Label>
-                          <Input
-                            id="currentPassword"
-                            name="currentPassword"
-                            type="password"
-                            value={formData.currentPassword}
-                            onChange={handleChange}
-                            className="bg-white border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg"
-                          />
+                
+                <div className="grid grid-cols-3 gap-4">
+                  {stats.map((stat, index) => (
+                    <div 
+                      key={index} 
+                      className="bg-gradient-to-br from-white to-orange-50 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 border border-orange-100"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="bg-orange-100 rounded-lg p-2">
+                          <stat.icon className="h-6 w-6 text-orange-500" />
                         </div>
-                        
                         <div>
-                          <Label htmlFor="newPassword" className="text-orange-800 font-medium block mb-2">New Password</Label>
-                          <Input
-                            id="newPassword"
-                            name="newPassword"
-                            type="password"
-                            value={formData.newPassword}
-                            onChange={handleChange}
-                            className="bg-white border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="confirmPassword" className="text-orange-800 font-medium block mb-2">Confirm New Password</Label>
-                          <Input
-                            id="confirmPassword"
-                            name="confirmPassword"
-                            type="password"
-                            value={formData.confirmPassword}
-                            onChange={handleChange}
-                            className="bg-white border-orange-200 focus:border-orange-500 focus:ring-orange-500 rounded-lg"
-                          />
+                          <p className="text-sm text-orange-600 font-medium mb-1">{stat.label}</p>
+                          <p className="text-2xl font-bold text-orange-800">{stat.value}</p>
                         </div>
                       </div>
                     </div>
-                  </>
-                )}
-
-                {isEditing && (
-                  <div className="flex justify-end mt-8">
-                    <Button
-                      type="submit"
-                      className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white min-w-[140px] rounded-lg py-2.5"
-                    >
-                      Save Changes
-                    </Button>
-                  </div>
-                )}
-              </form>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
 
       <Footer />
+
+      <ChangePasswordModal
+        isOpen={isChangingPassword}
+        onClose={() => setIsChangingPassword(false)}
+      />
     </div>
   );
 };

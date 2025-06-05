@@ -88,7 +88,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userData = response.data;
       
       if (userData && userData.id) {
-        updateUser(userData);
+        // Only update if data has changed
+        if (JSON.stringify(userData) !== JSON.stringify(user)) {
+          updateUser(userData);
+        }
       }
     } catch (error: any) {
       console.error('Failed to refresh user data:', error);
@@ -100,9 +103,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Set up initial auth check and periodic refresh of user data
   useEffect(() => {
+    let isMounted = true;
+
     const initializeAuth = async () => {
       const token = localStorage.getItem('token');
-      if (token) {
+      if (token && isMounted) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         try {
           await refreshUser();
@@ -110,15 +115,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error('Failed to initialize auth:', error);
         }
       }
-      setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+      }
     };
 
     initializeAuth();
 
-    // Set up periodic refresh every 5 minutes
-    const refreshInterval = setInterval(refreshUser, 5 * 60 * 1000);
-    return () => clearInterval(refreshInterval);
-  }, []);
+    // No need for periodic refresh as we'll rely on user actions
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array as this should only run once on mount
 
   // Set up axios interceptor for token
   useEffect(() => {
@@ -155,11 +163,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
-        // Load user data and get profile
-        await refreshUser();
+        // Get profile data in a single call
         const profileResponse = await api.get('/profile');
-        
-        // Update user data in state and localStorage
         updateUser(profileResponse.data);
         
         // Handle redirection based on role

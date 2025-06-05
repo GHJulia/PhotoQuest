@@ -88,7 +88,7 @@ func UpdateProfile(c *gin.Context) {
 	var currentUser models.User
 	err := config.DB.Collection("users").FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&currentUser)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
+		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
 
@@ -102,13 +102,13 @@ func UpdateProfile(c *gin.Context) {
 		NewPassword     string `json:"new_password"`
 	}
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		c.JSON(400, gin.H{"error": "Invalid request format"})
 		return
 	}
 
-	// Validate required fields
+	// Validate required fields for profile update
 	if req.Name == "" || req.Surname == "" || req.Username == "" || req.Email == "" {
-		c.JSON(400, gin.H{"error": "กรุณากรอกข้อมูลให้ครบถ้วน"})
+		c.JSON(400, gin.H{"error": "Name, surname, username, and email are required"})
 		return
 	}
 
@@ -119,7 +119,7 @@ func UpdateProfile(c *gin.Context) {
 		"_id":      bson.M{"$ne": objID},
 	}).Decode(&existingUser)
 	if err == nil {
-		c.JSON(400, gin.H{"error": "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว"})
+		c.JSON(400, gin.H{"error": "Username is already taken"})
 		return
 	}
 
@@ -129,7 +129,7 @@ func UpdateProfile(c *gin.Context) {
 		"_id":   bson.M{"$ne": objID},
 	}).Decode(&existingUser)
 	if err == nil {
-		c.JSON(400, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+		c.JSON(400, gin.H{"error": "Email is already taken"})
 		return
 	}
 
@@ -144,22 +144,15 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	// Handle password update if provided
-	if req.NewPassword != "" {
-		// Verify current password
-		if req.CurrentPassword == "" {
-			c.JSON(400, gin.H{"error": "กรุณากรอกรหัสผ่านปัจจุบัน"})
-			return
-		}
-
+	if req.NewPassword != "" && req.CurrentPassword != "" {
 		if err := bcrypt.CompareHashAndPassword([]byte(currentUser.Password), []byte(req.CurrentPassword)); err != nil {
-			c.JSON(401, gin.H{"error": "รหัสผ่านปัจจุบันไม่ถูกต้อง"})
+			c.JSON(401, gin.H{"error": "Current password is incorrect"})
 			return
 		}
 
-		// Hash new password
 		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 		if err != nil {
-			c.JSON(500, gin.H{"error": "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน"})
+			c.JSON(500, gin.H{"error": "Failed to process new password"})
 			return
 		}
 
@@ -169,12 +162,12 @@ func UpdateProfile(c *gin.Context) {
 	// Update user
 	result, err := config.DB.Collection("users").UpdateByID(context.TODO(), objID, update)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "ไม่สามารถอัพเดทข้อมูลได้"})
+		c.JSON(500, gin.H{"error": "Failed to update profile"})
 		return
 	}
 
 	if result.ModifiedCount == 0 {
-		c.JSON(400, gin.H{"error": "ไม่มีการเปลี่ยนแปลงข้อมูล"})
+		c.JSON(400, gin.H{"error": "No changes were made"})
 		return
 	}
 
@@ -182,13 +175,13 @@ func UpdateProfile(c *gin.Context) {
 	var updatedUser models.User
 	err = config.DB.Collection("users").FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&updatedUser)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "ไม่สามารถดึงข้อมูลที่อัพเดทได้"})
+		c.JSON(500, gin.H{"error": "Failed to retrieve updated profile"})
 		return
 	}
 
 	updatedUser.Password = "" // hide password
 	c.JSON(200, gin.H{
-		"message": "อัพเดทข้อมูลสำเร็จ",
+		"message": "Profile updated successfully",
 		"user":    updatedUser,
 	})
 }
