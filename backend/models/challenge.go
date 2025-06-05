@@ -1,14 +1,16 @@
 package models
 
-
+import (
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type Challenge struct {
-    ID        primitive.ObjectID bson:"_id,omitempty" json:"id"
-    Prompt    string             bson:"prompt" json:"prompt"
-    Mode      string             bson:"mode" json:"mode" // easy, medium, hard
-    Points    int                bson:"points" json:"points"
-    CreatedAt primitive.DateTime bson:"created_at" json:"created_at"
-    Status    string             bson:"status" json:"status" // active/inactive
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Prompt    string             `bson:"prompt" json:"prompt"`
+	Mode      string             `bson:"mode" json:"mode"` // easy, medium, hard
+	Points    int                `bson:"points" json:"points"`
+	CreatedAt primitive.DateTime `bson:"created_at" json:"created_at"`
+	Status    string             `bson:"status" json:"status"` // active/inactive
 }
 
 type UserChallenge struct {
