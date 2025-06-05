@@ -12,7 +12,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "../components/ui/dropdown-menu";
+import { Badge } from "../components/ui/badge";
 
 interface GalleryPost {
   id: string;
@@ -35,7 +38,39 @@ const Gallery = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedImage, setSelectedImage] = useState<GalleryPost | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [activeFilters, setActiveFilters] = useState({
+    date: 'none',
+    difficulty: 'none',
+    likes: 'none'
+  });
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  // Filter options
+  const filterOptions = {
+    date: [
+      { value: 'none', label: 'No Date Sort', icon: Clock },
+      { value: 'newest', label: 'Newest First', icon: Clock },
+      { value: 'oldest', label: 'Oldest First', icon: Clock }
+    ],
+    difficulty: [
+      { value: 'none', label: 'All Difficulties', icon: Trophy },
+      { value: 'easy', label: 'Easy', icon: Trophy },
+      { value: 'medium', label: 'Medium', icon: Trophy },
+      { value: 'hard', label: 'Hard', icon: Trophy }
+    ],
+    likes: [
+      { value: 'none', label: 'No Likes Sort', icon: Heart },
+      { value: 'most', label: 'Most Liked', icon: Heart },
+      { value: 'least', label: 'Least Liked', icon: Heart }
+    ]
+  };
+
+  const handleFilterClick = (category: 'date' | 'difficulty' | 'likes', value: string) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [category]: value
+    }));
+  };
 
   const fetchPhotos = async () => {
     try {
@@ -46,6 +81,7 @@ const Gallery = () => {
       });
       if (res.ok) {
         const data = await res.json();
+        console.log('Fetched photos:', data);
         setPhotos(data);
       } else {
         toast(
@@ -257,12 +293,69 @@ const Gallery = () => {
     }
   };
 
-  const filteredPhotos = photos.filter(photo => {
-    const searchLower = searchQuery.toLowerCase();
-    const taskOrPrompt = (photo.task || photo.prompt || '').toLowerCase();
-    const userName = (photo.user_name || '').toLowerCase();
-    return taskOrPrompt.includes(searchLower) || userName.includes(searchLower);
-  });
+  const getFilteredPhotos = () => {
+    return photos.filter(photo => {
+      // Apply search filter
+      const searchLower = searchQuery.toLowerCase();
+      const taskOrPrompt = (photo.task || photo.prompt || '').toLowerCase();
+      const userName = (photo.user_name || '').toLowerCase();
+      const matchesSearch = taskOrPrompt.includes(searchLower) || userName.includes(searchLower);
+
+      // Debug logs for difficulty filtering
+      console.log('Filtering photo:', {
+        photoId: photo.id,
+        photoDifficulty: photo.difficulty,
+        selectedDifficulty: activeFilters.difficulty,
+        isMatch: activeFilters.difficulty === 'none' || 
+                (photo.difficulty?.toLowerCase() || '') === activeFilters.difficulty.toLowerCase()
+      });
+
+      // Apply difficulty filter with null check and case insensitive comparison
+      const matchesDifficulty = activeFilters.difficulty === 'none' || 
+                               (photo.difficulty?.toLowerCase() || '') === activeFilters.difficulty.toLowerCase();
+
+      return matchesSearch && matchesDifficulty;
+    });
+  };
+
+  const getSortedPhotos = (filteredPhotos: GalleryPost[]) => {
+    // Log filtered photos before sorting
+    console.log('Filtered photos before sorting:', filteredPhotos.length);
+
+    return [...filteredPhotos].sort((a, b) => {
+      // First apply likes sorting if active
+      if (activeFilters.likes !== 'none') {
+        const likesComparison = activeFilters.likes === 'most' 
+          ? b.likes.length - a.likes.length
+          : a.likes.length - b.likes.length;
+        
+        if (likesComparison !== 0) return likesComparison;
+      }
+
+      // Then apply date sorting if active
+      if (activeFilters.date !== 'none') {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return activeFilters.date === 'newest' ? dateB - dateA : dateA - dateB;
+      }
+
+      // If no sorting is active, maintain original order
+      return 0;
+    });
+  };
+
+  // Log state changes for debugging
+  useEffect(() => {
+    console.log('Active filters changed:', activeFilters);
+    console.log('Current photos count:', photos.length);
+  }, [activeFilters, photos]);
+
+  const filteredAndSortedPhotos = getSortedPhotos(getFilteredPhotos());
+
+  // Log final results
+  useEffect(() => {
+    console.log('Final filtered and sorted photos:', filteredAndSortedPhotos.length);
+  }, [filteredAndSortedPhotos]);
 
   // Scroll to top handler
   const scrollToTop = () => {
@@ -298,18 +391,94 @@ const Gallery = () => {
           </p>
 
           {/* Search and Filter Section */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-2xl mx-auto">
-            <div className="relative w-full sm:w-96">
-            <input
-              type="text"
-              placeholder="Search photos or photographers..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+          <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-96 mx-auto">
+              <input
+                type="text"
+                placeholder="Search photos or photographers..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full px-4 py-3 pl-11 rounded-full border-2 border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-orange-400 h-5 w-5" />
+              />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-orange-400 h-5 w-5" />
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              {/* Date Sort Filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="bg-white">
+                    <Clock className="w-4 h-4 mr-2" />
+                    {filterOptions.date.find(opt => opt.value === activeFilters.date)?.label || 'Sort by Date'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-[200px]">
+                  <DropdownMenuLabel>Sort by Date</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {filterOptions.date.map(option => (
+                    <DropdownMenuItem 
+                      key={option.value}
+                      onClick={() => handleFilterClick('date', option.value)}
+                      className="cursor-pointer"
+                    >
+                      <option.icon className="w-4 h-4 mr-2" />
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Difficulty Filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="bg-white">
+                    <Trophy className="w-4 h-4 mr-2" />
+                    {filterOptions.difficulty.find(opt => opt.value === activeFilters.difficulty)?.label || 'Filter by Difficulty'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-[200px]">
+                  <DropdownMenuLabel>Filter by Difficulty</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {filterOptions.difficulty.map(option => (
+                    <DropdownMenuItem 
+                      key={option.value}
+                      onClick={() => handleFilterClick('difficulty', option.value)}
+                      className="cursor-pointer"
+                    >
+                      <option.icon className="w-4 h-4 mr-2" />
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Likes Sort Filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="bg-white">
+                    <Heart className="w-4 h-4 mr-2" />
+                    {filterOptions.likes.find(opt => opt.value === activeFilters.likes)?.label || 'Sort by Likes'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-[200px]">
+                  <DropdownMenuLabel>Sort by Likes</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {filterOptions.likes.map(option => (
+                    <DropdownMenuItem 
+                      key={option.value}
+                      onClick={() => handleFilterClick('likes', option.value)}
+                      className="cursor-pointer"
+                    >
+                      <option.icon className="w-4 h-4 mr-2" />
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
         </motion.div>
 
         {loading ? (
@@ -320,14 +489,14 @@ const Gallery = () => {
             </div>
             <p className="text-orange-600 mt-4 animate-pulse">Loading amazing photos...</p>
           </div>
-        ) : filteredPhotos.length > 0 ? (
+        ) : filteredAndSortedPhotos.length > 0 ? (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
             <AnimatePresence mode="popLayout">
-              {filteredPhotos.map((photo, index) => (
+              {filteredAndSortedPhotos.map((photo, index) => (
                 <motion.div
               key={photo.id} 
                   initial={{ opacity: 0, y: 20 }}
@@ -392,57 +561,75 @@ const Gallery = () => {
                     </div>
                   </div>
                 </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                    <button 
-                      onClick={(e) => handleLike(photo.id, e)}
-                              className="flex items-center gap-2 hover:text-red-500 transition-colors group/like"
-                    >
-                      <Heart 
-                        className={`h-5 w-5 transition-all duration-300 ${
-                                  photo.likes.includes(user.email) 
-                            ? 'fill-red-500 text-red-500 scale-110' 
-                                    : 'group-hover/like:scale-125'
-                        }`} 
-                      />
-                              <span className="font-medium">{photo.likes.length}</span>
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="hover:text-orange-500 transition-colors group/share">
-                          <Share2 className="h-5 w-5 transition-transform duration-300 group-hover/share:scale-125" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48 bg-white rounded-xl shadow-xl border border-orange-100">
-                        <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'instagram', e)} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                          <Instagram className="h-4 w-4 text-pink-600" />
-                          <span>Share to Instagram</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'facebook', e)} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                          <Facebook className="h-4 w-4 text-blue-600" />
-                          <span>Share to Facebook</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'twitter', e)} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                          <Twitter className="h-4 w-4 text-blue-400" />
-                          <span>Share to Twitter</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'copy', e)} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                          <LinkIcon className="h-4 w-4 text-gray-600" />
-                          <span>Copy Link</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                          <Link to={`/challenges/guess/${photo.id}`}>
-                  <Button 
-                    size="sm" 
-                              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-md hover:shadow-xl transition-all duration-300 rounded-full px-6"
-                  >
-                    Try Challenge
-                  </Button>
-                </Link>
-              </div>
-            </div>
+                        <div className="flex items-center justify-between mt-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => handleLike(photo.id, e)}
+                              className={`flex items-center gap-1.5 text-sm ${
+                                photo.likes.includes(user.email)
+                                  ? 'text-red-500'
+                                  : 'text-gray-600 hover:text-red-500'
+                              } transition-colors duration-200`}
+                            >
+                              <Heart className={`w-5 h-5 ${
+                                photo.likes.includes(user.email)
+                                  ? 'fill-current'
+                                  : ''
+                              }`} />
+                              <span>{photo.likes.length}</span>
+                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-gray-600 hover:text-gray-900"
+                                  onClick={(e) => e.preventDefault()}
+                                >
+                                  <Share2 className="w-5 h-5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'facebook', e)}>
+                                  <Facebook className="w-4 h-4 mr-2" />
+                                  Share on Facebook
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'twitter', e)}>
+                                  <Twitter className="w-4 h-4 mr-2" />
+                                  Share on Twitter
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'instagram', e)}>
+                                  <Instagram className="w-4 h-4 mr-2" />
+                                  Share on Instagram
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handleShare(photo.id, 'copy', e)}>
+                                  <LinkIcon className="w-4 h-4 mr-2" />
+                                  Copy Link
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className={`bg-orange-500 hover:bg-orange-600 text-white ${
+                              photo.user_id === user.id ? 
+                              'opacity-50 cursor-not-allowed hover:bg-orange-500' : 
+                              ''
+                            }`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (photo.user_id !== user.id) {
+                                // Navigate to challenge
+                                window.location.href = `/challenges/guess/${photo.id}`;
+                              }
+                            }}
+                            disabled={photo.user_id === user.id}
+                          >
+                            {photo.user_id === user.id ? "Your Challenge" : "Try Challenge"}
+                          </Button>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 </motion.div>

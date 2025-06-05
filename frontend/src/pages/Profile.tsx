@@ -209,14 +209,15 @@ const Profile = () => {
                         <img 
                           src={profileImage} 
                           alt="Profile" 
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover rounded-full"
+                          style={{ objectPosition: 'center' }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
                           <User className="h-20 w-20 text-orange-400" />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all duration-300">
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all duration-300 rounded-full">
                         <Upload className="h-10 w-10 text-white opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300" />
                       </div>
                     </div>
