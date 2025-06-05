@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Heart, Share2, Clock, Camera, Loader2, ImagePlus, User, X, Instagram, Facebook, Twitter, Link as LinkIcon } from 'lucide-react';
+import { Heart, Share2, Clock, Camera, Loader2, ImagePlus, User, X, Instagram, Facebook, Twitter, Link as LinkIcon, Trash2 } from 'lucide-react';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,17 @@ import { toast } from '../components/ui/use-toast';
 import api from '../lib/axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +41,7 @@ const MyPhotos = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [selectedPhoto, setSelectedPhoto] = useState<MyPhoto | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<MyPhoto | null>(null);
 
   useEffect(() => {
     fetchMyPhotos();
@@ -87,6 +99,35 @@ const MyPhotos = () => {
       toast({
         title: "Error",
         description: "Could not share the photo. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (photo: MyPhoto) => {
+    try {
+      await api.delete(`/my-photos/${photo.id}`);
+      
+      toast({
+        title: "Success",
+        description: "Photo deleted successfully",
+      });
+      
+      // Remove the photo from the state
+      setPhotos(photos.filter(p => p.id !== photo.id));
+      
+      // If the deleted photo is currently selected in the modal, close the modal
+      if (selectedPhoto?.id === photo.id) {
+        setSelectedPhoto(null);
+      }
+      
+      // Reset the photoToDelete state
+      setPhotoToDelete(null);
+    } catch (error) {
+      console.error('Error deleting photo:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete photo. Please try again.",
         variant: "destructive"
       });
     }
@@ -212,39 +253,52 @@ const MyPhotos = () => {
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-orange-600">
-                            <Heart className="h-5 w-5 fill-red-500 text-red-500 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="font-medium">{photo.likes.length}</span>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 text-orange-600">
+                              <Heart className="h-5 w-5 fill-red-500 text-red-500 transition-transform duration-300 group-hover:scale-110" />
+                              <span className="font-medium">{photo.likes.length}</span>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 transition-all duration-300"
+                                >
+                                  <Share2 className="h-5 w-5 transition-transform duration-300 hover:scale-110" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                <DropdownMenuItem onClick={() => handleShare(photo, 'instagram')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
+                                  <Instagram className="h-4 w-4 text-pink-600" />
+                                  <span>Share to Instagram</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleShare(photo, 'facebook')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
+                                  <Facebook className="h-4 w-4 text-blue-600" />
+                                  <span>Share to Facebook</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleShare(photo, 'twitter')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
+                                  <Twitter className="h-4 w-4 text-blue-400" />
+                                  <span>Share to Twitter</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleShare(photo, 'copy')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
+                                  <LinkIcon className="h-4 w-4 text-gray-600" />
+                                  <span>Copy Link</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 transition-all duration-300"
-                              >
-                                <Share2 className="h-5 w-5 transition-transform duration-300 hover:scale-110" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48 bg-white rounded-xl shadow-xl border border-orange-100">
-                              <DropdownMenuItem onClick={() => handleShare(photo, 'instagram')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                                <Instagram className="h-4 w-4 text-pink-600" />
-                                <span>Share to Instagram</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleShare(photo, 'facebook')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                                <Facebook className="h-4 w-4 text-blue-600" />
-                                <span>Share to Facebook</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleShare(photo, 'twitter')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                                <Twitter className="h-4 w-4 text-blue-400" />
-                                <span>Share to Twitter</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleShare(photo, 'copy')} className="flex items-center gap-2 py-2 cursor-pointer hover:bg-orange-50">
-                                <LinkIcon className="h-4 w-4 text-gray-600" />
-                                <span>Copy Link</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPhotoToDelete(photo);
+                            }}
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50 transition-all duration-300"
+                          >
+                            <Trash2 className="h-5 w-5 transition-transform duration-300 hover:scale-110" />
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
@@ -341,6 +395,27 @@ const MyPhotos = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!photoToDelete} onOpenChange={(open) => !open && setPhotoToDelete(null)}>
+        <AlertDialogContent className="bg-white rounded-2xl p-6 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold text-red-600">Delete Challenge Post</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600">
+              Are you sure you want to delete this challenge post? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6">
+            <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => photoToDelete && handleDelete(photoToDelete)}
+              className="bg-red-500 hover:bg-red-600 text-white rounded-lg"
+            >
+              Delete Post
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Footer />
     </div>
