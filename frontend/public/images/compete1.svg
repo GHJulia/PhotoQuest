@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Trophy -->
+  <path d="M30 20h40v10h10v40h-60v-40h10z" fill="#FBBF24"/>
+  <path d="M45 70h10v10h-10z" fill="#FBBF24"/>
+  <path d="M35 80h30v10h-30z" fill="#FBBF24"/>
+  
+  <!-- Stars -->
+  <path d="M20 30l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z" fill="#F97316"/>
+  <path d="M70 30l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z" fill="#F97316"/>
+</svg> 
