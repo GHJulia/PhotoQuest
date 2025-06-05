@@ -32,7 +32,8 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
+    // Only handle 401 if it's not an intentional logout
+    if (error.response?.status === 401 && error.config.url !== '/auth/logout') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

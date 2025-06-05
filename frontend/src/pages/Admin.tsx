@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Table, 
   TableBody, 
@@ -24,8 +34,11 @@ import {
   Edit,
   Trash2,
   Plus,
-  Camera
+  Camera,
+  CheckCircle,
+  X
 } from 'lucide-react';
+import { toast } from 'sonner';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { EditUserModal } from '@/components/EditUserModal';
@@ -34,6 +47,7 @@ import { User, Challenge } from '@/types';
 
 const Admin = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchUser, setSearchUser] = useState('');
   const [searchChallenge, setSearchChallenge] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string[]>([]);
@@ -42,10 +56,22 @@ const Admin = () => {
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedTask, setSelectedTask] = useState<Challenge | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Format date to display in a consistent, user-friendly format
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
 
   const fetchData = async () => {
     try {
@@ -109,16 +135,32 @@ const Admin = () => {
   };
 
   const deleteUser = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
     try {
       await axios.delete(`/admin/users/${id}`);
       // Remove user from the state
       setUsers(prev => prev.filter(user => user.id !== id));
-      alert('User deleted successfully');
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            Success
+          </div>
+          <div className="text-sm text-gray-800">User deleted successfully!</div>
+        </div>
+      );
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user. Please try again.');
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <X className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Failed to delete user. Please try again.</div>
+        </div>
+      );
+    } finally {
+      setUserToDelete(null);
     }
   };
 
@@ -135,7 +177,6 @@ const Admin = () => {
         total_score: updatedData.points,
         id: id
       };
-
 
       console.log('Sending payload to backend:', payload);
 
@@ -160,28 +201,71 @@ const Admin = () => {
         );
         
         setSelectedUser(null);
-        alert('User updated successfully!');
+        // Show success toast instead of alert
+        toast(
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Success
+            </div>
+            <div className="text-sm text-gray-800">User updated successfully!</div>
+          </div>
+        );
       }
     } catch (error: any) {
       console.error('Error updating user:', error);
       console.error('Error response:', error.response?.data);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to update user. Please try again.';
-      alert(errorMessage);
+      // Show error toast instead of alert
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <X className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">{errorMessage}</div>
+        </div>
+      );
     }
   };
 
-  const deleteTask = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+  const handleDeleteConfirm = async () => {
+    if (!taskToDelete) return;
+    
     try {
-      await axios.delete(`/admin/tasks/${id}`);
-      setChallenges(prev => prev.filter(t => t.id !== id));
+      await axios.delete(`/admin/tasks/${taskToDelete}`);
+      setChallenges(prev => prev.filter(t => t.id !== taskToDelete));
+      
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            Success
+          </div>
+          <div className="text-sm text-gray-800">Photo task deleted successfully!</div>
+        </div>
+      );
     } catch (err) {
       console.error('Error deleting task:', err);
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <Trash2 className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Failed to delete task. Please try again.</div>
+        </div>
+      );
+    } finally {
+      setTaskToDelete(null);
     }
   };
 
   const updateTask = async (id: string, updatedTask: Partial<Challenge>) => {
     try {
+      console.log('Updating task with ID:', id);
+      console.log('Update data:', updatedTask);
+      
       // Transform the data to match the backend API structure
       const payload = {
         prompt: updatedTask.task_description,
@@ -190,37 +274,53 @@ const Admin = () => {
         points: updatedTask.points
       };
 
-      await axios.put(`/admin/tasks/${id}`, payload);
+      console.log('Sending payload to backend:', payload);
+
+      const response = await axios.put(`/admin/tasks/${id}`, payload);
       
-      // Update the local state with the new data
-      setChallenges(prev => prev.map(challenge => 
-        challenge.id === id 
-          ? {
-              ...challenge,
-              task_description: updatedTask.task_description || challenge.task_description,
-              difficulty: updatedTask.difficulty || challenge.difficulty,
-              status: updatedTask.status || challenge.status,
-              points: updatedTask.points || challenge.points
-            }
-          : challenge
-      ));
+      if (response.data) {
+        console.log('Update successful:', response.data);
+        
+        // Update the local state with the new data
+        setChallenges(prev => prev.map(challenge => 
+          challenge.id === id 
+            ? {
+                ...challenge,
+                task_description: updatedTask.task_description || challenge.task_description,
+                difficulty: updatedTask.difficulty || challenge.difficulty,
+                status: updatedTask.status || challenge.status,
+                points: updatedTask.points || challenge.points
+              }
+            : challenge
+        ));
 
-      setSelectedTask(null);
-      alert('Task updated successfully!');
-    } catch (err) {
+        setSelectedTask(null);
+        // Remove alert and use toast instead
+        toast(
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Success
+            </div>
+            <div className="text-sm text-gray-800">Task updated successfully!</div>
+          </div>
+        );
+      }
+    } catch (err: any) {
       console.error('Error updating task:', err);
-      alert('Failed to update task. Please try again.');
+      console.error('Error response:', err.response?.data);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to update task. Please try again.';
+      // Show error toast instead of alert
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <X className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">{errorMessage}</div>
+        </div>
+      );
     }
-  };
-
-  // Format date to readable string
-  const formatDate = (dateString: string | Date) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   };
 
   return (
@@ -230,9 +330,9 @@ const Admin = () => {
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-orange-800">Admin Dashboard</h1>
-            <p className="text-orange-600 mt-2">Manage users and photography challenges</p>
+          <div className="mb-8 text-center">
+            <h1 className="text-4xl font-bold text-orange-800">Admin Dashboard</h1>
+            <p className="text-lg text-orange-600 mt-2">Manage users and photography challenges</p>
           </div>
 
           {/* Main Content */}
@@ -315,7 +415,7 @@ const Admin = () => {
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     <Calendar className="h-4 w-4 text-gray-400" />
-                                    <span>{user.join_date}</span>
+                                    <span>{formatDate(user.join_date)}</span>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -347,7 +447,7 @@ const Admin = () => {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => deleteUser(user.id)}
+                                      onClick={() => setUserToDelete(user.id)}
                                       className="hover:bg-red-100"
                                     >
                                       <Trash2 className="h-4 w-4 text-red-600" />
@@ -476,7 +576,12 @@ const Admin = () => {
                                     <span>{task.points}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell>{task.created_date}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-gray-400" />
+                                    <span>{formatDate(task.created_date)}</span>
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <span className={`px-2 py-1 rounded-full text-xs ${
                                     task.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -497,7 +602,7 @@ const Admin = () => {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => deleteTask(task.id)}
+                                      onClick={() => setTaskToDelete(task.id)}
                                       className="hover:bg-red-100"
                                     >
                                       <Trash2 className="h-4 w-4 text-red-600" />
@@ -535,6 +640,52 @@ const Admin = () => {
             onSave={updateTask}
           />
         )}
+
+        {/* Task Delete Dialog */}
+        <AlertDialog open={!!taskToDelete} onOpenChange={() => setTaskToDelete(null)}>
+          <AlertDialogContent className="bg-white">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-semibold text-gray-900">Delete Task</AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-600">
+                Are you sure you want to delete this task? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-gray-100 hover:bg-gray-200 text-gray-900">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteConfirm}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* User Delete Dialog */}
+        <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+          <AlertDialogContent className="bg-white">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-semibold text-gray-900">Delete User</AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-600">
+                Are you sure you want to delete this user? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-gray-100 hover:bg-gray-200 text-gray-900">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => userToDelete && deleteUser(userToDelete)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

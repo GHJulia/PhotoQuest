@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, Plus, X } from 'lucide-react';
+import { ArrowLeft, Camera, Plus, X, CheckCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 
@@ -31,11 +32,31 @@ const CreateChallenge = () => {
         prompt: task.trim(),
         mode: difficulty
       });
-      alert('Task created successfully!');
+      
+      // Show success toast
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            Success
+          </div>
+          <div className="text-sm text-gray-800">Photography task created successfully!</div>
+        </div>
+      );
+      
       navigate('/admin');
     } catch (err) {
       console.error('Error creating task:', err);
-      alert('Failed to create task. Please try again.');
+      // Show error toast
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <X className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Failed to create task. Please try again.</div>
+        </div>
+      );
     }
   };
 

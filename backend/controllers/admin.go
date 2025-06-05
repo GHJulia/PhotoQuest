@@ -33,7 +33,7 @@ func AdminDashboardUsers(c *gin.Context) {
 
 	var response []gin.H
 	for _, u := range users {
-		joinDate := u.ID.Timestamp().Format("January 2, 2006")
+		joinDate := u.ID.Timestamp().Format("2006-01-02")
 
 		// Split full name into name and surname if needed
 		name := u.Name
@@ -141,11 +141,17 @@ func AdminDashboardTasks(c *gin.Context) {
 	// Format tasks
 	var result []gin.H
 	for _, task := range tasks {
+		// Get the creation date, falling back to ID timestamp if needed
+		createdDate := task.CreatedAt
+		if createdDate.IsZero() {
+			createdDate = task.ID.Timestamp()
+		}
+
 		result = append(result, gin.H{
 			"task_description": task.Prompt,
 			"difficulty":       task.Mode,
 			"points":           task.Points,
-			"created_date":     task.CreatedAt.Time().Format("January 2, 2006"),
+			"created_date":     createdDate.Format(time.RFC3339),
 			"status":           task.Status,
 			"id":               task.ID.Hex(),
 		})
@@ -171,24 +177,38 @@ func CreatePhotographyTask(c *gin.Context) {
 		return
 	}
 
+	// Create a new task with current timestamp
+	currentTime := time.Now().UTC()
 	newTask := models.Challenge{
+		ID:        primitive.NewObjectID(),
 		Prompt:    input.Prompt,
 		Mode:      input.Mode,
 		Points:    100,      // Default
 		Status:    "active", // Default
-		CreatedAt: primitive.NewDateTimeFromTime(time.Now()),
+		CreatedAt: currentTime,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := config.DB.Collection("challenges").InsertOne(ctx, newTask)
+	result, err := config.DB.Collection("challenges").InsertOne(ctx, newTask)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to create task"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Task created"})
+	// Return the created task with all fields including the creation date
+	c.JSON(200, gin.H{
+		"message": "Task created",
+		"task": gin.H{
+			"id":               result.InsertedID.(primitive.ObjectID).Hex(),
+			"task_description": input.Prompt,
+			"difficulty":       input.Mode,
+			"points":           100,
+			"status":           "active",
+			"created_date":     currentTime.Format(time.RFC3339),
+		},
+	})
 }
 
 // Edit Task by ID
@@ -261,37 +281,74 @@ func DeleteTaskByID(c *gin.Context) {
 }
 
 func GetAllUsers(c *gin.Context) {
-	var users []bson.M
-	cursor, err := config.DB.Collection("users").Find(context.TODO(), bson.M{})
+	ctx := context.TODO()
+	var users []models.User
+	cursor, err := config.DB.Collection("users").Find(ctx, bson.M{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
 		return
 	}
-	defer cursor.Close(context.TODO())
+	defer cursor.Close(ctx)
 
-	if err = cursor.All(context.TODO(), &users); err != nil {
+	if err = cursor.All(ctx, &users); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode users"})
 		return
 	}
 
-	c.JSON(http.StatusOK, users)
+	var response []gin.H
+	for _, user := range users {
+		// Format the creation date from the ObjectID
+		createdAt := user.ID.Timestamp().Format("2006-01-02")
+
+		response = append(response, gin.H{
+			"id":         user.ID.Hex(),
+			"name":       user.Name,
+			"surname":    user.Surname,
+			"email":      user.Email,
+			"join_date":  createdAt,
+			"points":     user.TotalScore,
+			"role":       user.Role,
+			"avatar_url": user.AvatarURL,
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func GetAllTasks(c *gin.Context) {
-	var tasks []bson.M
-	cursor, err := config.DB.Collection("challenges").Find(context.TODO(), bson.M{})
+	ctx := context.TODO()
+	var tasks []models.Challenge
+	cursor, err := config.DB.Collection("challenges").Find(ctx, bson.M{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
 		return
 	}
-	defer cursor.Close(context.TODO())
+	defer cursor.Close(ctx)
 
-	if err = cursor.All(context.TODO(), &tasks); err != nil {
+	if err = cursor.All(ctx, &tasks); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode tasks"})
 		return
 	}
 
-	c.JSON(http.StatusOK, tasks)
+	var response []gin.H
+	for _, task := range tasks {
+		// Get the creation date, falling back to ID timestamp if needed
+		createdDate := task.CreatedAt
+		if createdDate.IsZero() {
+			createdDate = task.ID.Timestamp()
+		}
+
+		response = append(response, gin.H{
+			"id":               task.ID.Hex(),
+			"task_description": task.Prompt,
+			"difficulty":       task.Mode,
+			"points":           task.Points,
+			"created_date":     createdDate.Format(time.RFC3339),
+			"status":           task.Status,
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func CreateTask(c *gin.Context) {
@@ -312,15 +369,23 @@ func CreateTask(c *gin.Context) {
 
 func UpdateTask(c *gin.Context) {
 	id := c.Param("id")
+
+	// Convert string ID to ObjectID
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+
 	var task bson.M
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	_, err := config.DB.Collection("challenges").UpdateOne(
+	_, err = config.DB.Collection("challenges").UpdateOne(
 		context.TODO(),
-		bson.M{"_id": id},
+		bson.M{"_id": oid}, // Use the converted ObjectID
 		bson.M{"$set": task},
 	)
 	if err != nil {
@@ -333,7 +398,15 @@ func UpdateTask(c *gin.Context) {
 
 func DeleteTask(c *gin.Context) {
 	id := c.Param("id")
-	_, err := config.DB.Collection("challenges").DeleteOne(context.TODO(), bson.M{"_id": id})
+
+	// Convert string ID to ObjectID
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+
+	_, err = config.DB.Collection("challenges").DeleteOne(context.TODO(), bson.M{"_id": oid})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete task"})
 		return

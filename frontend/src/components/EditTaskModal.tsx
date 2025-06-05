@@ -10,6 +10,7 @@ import {
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
 import { Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 type TaskDifficulty = 'easy' | 'medium' | 'hard';
 type TaskStatus = 'active' | 'inactive';
@@ -40,9 +41,31 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose, onSave }) 
         status,
         points
       });
+      
+      // Show success toast
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-green-700 text-base">
+            <Check className="h-5 w-5 text-green-500" />
+            Success
+          </div>
+          <div className="text-sm text-gray-800">Task updated successfully!</div>
+        </div>
+      );
+      
       onClose();
     } catch (err) {
       console.error('Error updating task:', err);
+      // Show error toast
+      toast(
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-semibold text-red-700 text-base">
+            <X className="h-5 w-5 text-red-500" />
+            Error
+          </div>
+          <div className="text-sm text-gray-800">Failed to update task. Please try again.</div>
+        </div>
+      );
     }
   };
 

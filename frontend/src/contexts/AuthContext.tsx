@@ -206,9 +206,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    // First clear all auth-related data
     localStorage.removeItem('token');
-    updateUser(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('role');
+    
+    // Clear auth header
     delete api.defaults.headers.common['Authorization'];
+    
+    // Clear user state
+    updateUser(null);
+    
+    // Navigate to login page
     navigate('/login');
   };
 

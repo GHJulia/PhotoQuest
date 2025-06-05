@@ -19,7 +19,6 @@ const Navigation = () => {
   
   const handleLogout = () => {
     logout();
-    navigate('/');
   };
   
   const navItems = [
