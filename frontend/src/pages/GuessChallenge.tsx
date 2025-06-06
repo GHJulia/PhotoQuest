@@ -18,7 +18,8 @@ interface ChallengeData {
   difficulty: string;
   points: number;
   created_at: string;
-  author: string;
+  user_name: string;
+  user_avatar: string;
 }
 
 const GuessChallenge = () => {
@@ -328,7 +329,7 @@ const GuessChallenge = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-orange-300" />
-                      <span className="text-white">Created by <span className="font-medium text-orange-300">{challenge.author}</span></span>
+                      <span className="text-white">Created by <span className="font-medium text-orange-300">{challenge.user_name}</span></span>
                     </div>
                   </motion.div>
                 </div>
@@ -492,7 +493,7 @@ const GuessChallenge = () => {
               >
                 <div className="flex items-center space-x-4 mb-2">
                   <div>
-                    <h3 className="font-semibold text-white text-lg">{selectedImage.author}</h3>
+                    <h3 className="font-semibold text-white text-lg">{selectedImage.user_name}</h3>
                     <p className="text-orange-300 text-sm">
                       {formatDate(selectedImage.created_at).date} at {formatDate(selectedImage.created_at).time}
                     </p>
