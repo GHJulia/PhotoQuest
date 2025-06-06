@@ -23,6 +23,7 @@ const Leaderboard = () => {
     const fetchLeaderboard = async () => {
       try {
         const response = await api.get('/leaderboard');
+        console.log('Leaderboard data:', response.data);
         setLeaderboardData(response.data);
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
@@ -75,9 +76,10 @@ const Leaderboard = () => {
     }
   };
 
-  const filteredLeaderboard = leaderboardData.filter(player =>
-    player.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredLeaderboard = leaderboardData.filter(player => {
+    console.log('Filtering player:', player.username, 'with query:', searchQuery);
+    return player.username.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FEF6E9] via-orange-50 to-white">
@@ -255,11 +257,11 @@ const Leaderboard = () => {
                 ))}
               </div>
             ) : filteredLeaderboard.length > 0 ? (
-          <div 
+              <div 
                 className="space-y-4 max-h-[600px] overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-orange-300 scrollbar-track-orange-100"
               >
                 <AnimatePresence>
-                  {filteredLeaderboard.slice(3).map((player, index) => (
+                  {filteredLeaderboard.map((player, index) => (
                     <motion.div
                       key={player.rank}
                       initial={{ opacity: 0, y: 20 }}
@@ -268,16 +270,16 @@ const Leaderboard = () => {
                       transition={{ delay: index * 0.05 }}
                       className="group"
                     >
-            <Card 
+                      <Card 
                         className={`${getRankBg(player.rank)} shadow-lg hover:shadow-2xl transition-all duration-300 rounded-2xl border-0 transform hover:scale-[1.02]`}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
+                      >
+                        <CardContent className="p-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
                               <div className={`w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center font-bold ${getTextColor(player.rank)} shadow-inner`}>
                                 {getRankIcon(player.rank)}
-                    </div>
-                    
+                              </div>
+                              
                               <div className="flex items-center space-x-4">
                                 <div className="w-14 h-14 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center overflow-hidden shadow-lg border-2 border-white/30">
                                   {player.avatar_url ? (
@@ -289,31 +291,31 @@ const Leaderboard = () => {
                                   ) : (
                                     <User className="w-8 h-8 text-orange-500" />
                                   )}
-                      </div>
-                      <div>
+                                </div>
+                                <div>
                                   <div className={`font-bold text-lg ${getTextColor(player.rank)} group-hover:scale-105 transition-transform`}>
-                          {player.username}
-                        </div>
+                                    {player.username}
+                                  </div>
                                   <div className={`text-sm ${player.rank <= 3 ? 'text-white/90' : 'text-orange-700'}`}>
                                     Rank #{player.rank}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <div className={`text-sm ${player.rank <= 3 ? 'text-white/90' : 'text-orange-700'} mb-1`}>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="text-right">
+                              <div className={`text-sm ${player.rank <= 3 ? 'text-white/90' : 'text-orange-700'} mb-1`}>
                                 Total Score
-                    </div>
+                              </div>
                               <div className={`font-bold text-2xl ${getTextColor(player.rank)} group-hover:scale-105 transition-transform`}>
                                 {player.total_score.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </motion.div>
-          ))}
+                  ))}
                 </AnimatePresence>
               </div>
             ) : (
