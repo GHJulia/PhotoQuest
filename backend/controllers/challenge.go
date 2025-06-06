@@ -16,6 +16,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Postman: All routes work fine สังสัยตรง uploadcustomchallenge นิดนึงตรงที่ gallery_post
@@ -60,7 +61,7 @@ func AcceptChallenge(c *gin.Context) {
 
 	// Normalize
 	req.Email = strings.ToLower(req.Email)
-	req.Date = time.Now().Format("2006-01-02")
+	req.Date = time.Now().UTC()
 	req.Status = "accepted"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -69,9 +70,15 @@ func AcceptChallenge(c *gin.Context) {
 	userChallenges := config.DB.Collection("user_challenges")
 
 	// Check for existing challenge with the same prompt today
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	tomorrow := today.Add(24 * time.Hour)
+
 	duplicateFilter := bson.M{
-		"email":  req.Email,
-		"date":   req.Date,
+		"email": req.Email,
+		"date": bson.M{
+			"$gte": today,
+			"$lt":  tomorrow,
+		},
 		"prompt": req.Prompt,
 	}
 	dupCount, err := userChallenges.CountDocuments(ctx, duplicateFilter)
@@ -86,8 +93,11 @@ func AcceptChallenge(c *gin.Context) {
 
 	// Check if user has accepted more than 5 challenges today
 	limitFilter := bson.M{
-		"email":  req.Email,
-		"date":   req.Date,
+		"email": req.Email,
+		"date": bson.M{
+			"$gte": today,
+			"$lt":  tomorrow,
+		},
 		"status": "accepted",
 	}
 	count, err := userChallenges.CountDocuments(ctx, limitFilter)
@@ -134,29 +144,22 @@ func GetUserChallengeStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Check current day's challenges
-	today := time.Now().Format("2006-01-02")
+	// Proper time range: from start of today to start of tomorrow
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	tomorrow := today.Add(24 * time.Hour)
+
 	filter := bson.M{
-		"email":  email,
-		"date":   today,
+		"email": email,
 		"status": "accepted",
+		"date": bson.M{
+			"$gte": today,
+			"$lt":  tomorrow,
+		},
 	}
 
 	count, err := config.DB.Collection("user_challenges").CountDocuments(ctx, filter)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Database error"})
-		return
-	}
-
-	// Check if it's a new day and reset if needed
-	if count == 0 {
-		// Optional: You could clear old records here
-		c.JSON(200, gin.H{
-			"daily_challenges":     0,
-			"max_challenges":       5,
-			"remaining_challenges": 5,
-			"is_reset":             true,
-		})
 		return
 	}
 
@@ -167,6 +170,7 @@ func GetUserChallengeStatus(c *gin.Context) {
 		"is_reset":             false,
 	})
 }
+
 
 // UploadCustomChallenge
 // POST /challenge/upload
@@ -234,13 +238,15 @@ func UploadCustomChallenge(c *gin.Context) {
 		return
 	}
 
+	currentTime := time.Now().UTC()
+
 	// Create custom challenge document
 	challenge := models.CustomChallenge{
 		Email:        strings.ToLower(email),
 		ImageURL:     imageURL,
 		Choices:      choices,
 		CorrectIndex: correctIdx,
-		CreatedAt:    time.Now().Format(time.RFC3339),
+		CreatedAt:    currentTime,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -271,7 +277,7 @@ func UploadCustomChallenge(c *gin.Context) {
 		Prompt:       prompt,
 		Difficulty:   difficulty,
 		Likes:        []string{},
-		CreatedAt:    time.Now(),
+		CreatedAt:    currentTime,
 	}
 
 	_, err = config.DB.Collection("gallery_posts").InsertOne(ctx, gallery)
@@ -435,6 +441,9 @@ func GetGuessChallenge(c *gin.Context) {
 	// Return challenge data
 	c.JSON(http.StatusOK, gin.H{
 		"id":            post.ID.Hex(),
+		"user_id":       post.UserID.Hex(),
+		"user_name":     post.UserName,
+		"user_avatar":   post.UserAvatar,
 		"image_url":     post.ImageURL,
 		"prompt":        post.Prompt,
 		"choices":       post.Choices,
@@ -442,7 +451,6 @@ func GetGuessChallenge(c *gin.Context) {
 		"difficulty":    post.Difficulty,
 		"points":        100,
 		"created_at":    post.CreatedAt.Format(time.RFC3339),
-		"author":        post.UserName,
 	})
 }
 
@@ -512,82 +520,81 @@ func SubmitGuessChallenge(c *gin.Context) {
 		return
 	}
 
-	count, err := config.DB.Collection("user_answers").CountDocuments(ctx, bson.M{
+	var existingAnswer models.UserAnswer
+	err = config.DB.Collection("user_answers").FindOne(ctx, bson.M{
 		"user_id": userID,
 		"post_id": postID,
-	})
-	if err != nil {
+	}).Decode(&existingAnswer)
+
+	if err == nil { // Found existing answer
+		fmt.Printf("User %s has already answered challenge %s\n", userID.Hex(), postID.Hex())
+
+		// Get the selected choice from the existing answer
+		selectedChoice := post.Choices[existingAnswer.SelectedIndex]
+		correctChoice := post.Choices[post.CorrectIndex]
+
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "You have already submitted an answer for this challenge",
+			"previous_answer": gin.H{
+				"is_correct":     existingAnswer.IsCorrect,
+				"answer":         selectedChoice,
+				"correct_answer": correctChoice,
+				"selected_index": existingAnswer.SelectedIndex,
+				"correct_index":  post.CorrectIndex,
+				"points":         existingAnswer.Points,
+				"message":        fmt.Sprintf("You previously %s this challenge", map[bool]string{true: "completed", false: "attempted"}[existingAnswer.IsCorrect]),
+			},
+		})
+		return
+	} else if err != mongo.ErrNoDocuments {
 		fmt.Printf("Error checking existing answers: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing answers"})
 		return
 	}
-	if count > 0 {
-		fmt.Printf("User %s has already answered challenge %s\n", userID.Hex(), postID.Hex())
-		c.JSON(http.StatusConflict, gin.H{"error": "You have already submitted an answer for this challenge"})
-		return
-	}
 
-	// Validate selected index
-	if req.SelectedIndex < 0 || req.SelectedIndex >= len(post.Choices) {
-		fmt.Printf("Invalid answer index: %d (choices length: %d)\n", req.SelectedIndex, len(post.Choices))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid answer index"})
-		return
-	}
-
-	// Check answer
+	// Calculate points based on correctness
 	isCorrect := req.SelectedIndex == post.CorrectIndex
-	fmt.Printf("Answer check - Selected: %d, Correct: %d, IsCorrect: %v\n",
-		req.SelectedIndex, post.CorrectIndex, isCorrect)
+	points := map[bool]int{true: 100, false: 0}[isCorrect]
 
 	// Save answer attempt
 	answer := models.UserAnswer{
-		UserID:     userID,
-		PostID:     postID,
-		Answer:     post.Choices[req.SelectedIndex],
-		IsCorrect:  isCorrect,
-		AnsweredAt: time.Now().Unix(),
+		UserID:        userID,
+		PostID:        postID,
+		SelectedIndex: req.SelectedIndex,
+		Answer:        post.Choices[req.SelectedIndex],
+		IsCorrect:     isCorrect,
+		Points:        points,
+		AnsweredAt:    time.Now().Unix(),
 	}
 
 	_, err = config.DB.Collection("user_answers").InsertOne(ctx, answer)
 	if err != nil {
 		fmt.Printf("Error saving answer: %v\n", err)
-		fmt.Printf("Attempted to save answer: %+v\n", answer)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save answer"})
 		return
 	}
 
-	points := 0
-	// Award points if correct based on difficulty
+	// If answer is correct, update user's total score
 	if isCorrect {
-		// Set points to 100 for all difficulty levels
-		points = 100
-
 		// Update user's total score
 		_, err = config.DB.Collection("users").UpdateOne(ctx,
 			bson.M{"_id": userID},
 			bson.M{"$inc": bson.M{"total_score": points}},
 		)
 		if err != nil {
-			fmt.Printf("Failed to update user score: %v\n", err)
+			fmt.Printf("Error updating user score: %v\n", err)
 			// Don't return error to user since the answer was saved successfully
 		} else {
 			fmt.Printf("Updated user %s score by %d points\n", userID.Hex(), points)
 		}
 	}
 
-	// Get message based on correctness
-	message := "Incorrect answer. Try again!"
-	if isCorrect {
-		message = fmt.Sprintf("Correct answer! You earned %d points!", points)
-	}
-
-	response := gin.H{
+	// Return success response with answer details
+	c.JSON(http.StatusOK, gin.H{
 		"is_correct":     isCorrect,
 		"points":         points,
-		"message":        message,
-		"answer":         post.Choices[req.SelectedIndex],
-		"correct_answer": post.Choices[post.CorrectIndex],
-	}
-	fmt.Printf("Sending response: %+v\n", response)
-	c.JSON(http.StatusOK, response)
+		"selected_index": req.SelectedIndex,
+		"correct_index":  post.CorrectIndex,
+		"message":        fmt.Sprintf("Your answer is %s! %s", map[bool]string{true: "correct", false: "incorrect"}[isCorrect], map[bool]string{true: fmt.Sprintf("You earned %d points!", points), false: "Try again next time."}[isCorrect]),
+	})
 }
