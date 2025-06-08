@@ -1,12 +1,22 @@
 # 📸 Photo Quest
 
-Important Note: Please run the branch "all-files."
-
 Photo Quest is a full-stack photography challenge platform where users can:
 - Accept daily themed challenges
 - Upload custom photo quizzes
 - Earn points and climb the leaderboard
 - Interact with a vibrant photography community
+
+** Important Notes: Please run the newest branch of the code which is "all-files." **
+
+For Frontend :
+run
+cd frontend
+npm run deb
+
+For Backend :
+run
+cd backend
+go run main.go
 
 ---
 
