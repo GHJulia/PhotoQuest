@@ -1,5 +1,7 @@
 # 📸 Photo Quest
 
+Important Note: Please run the branch "all-files."
+
 Photo Quest is a full-stack photography challenge platform where users can:
 - Accept daily themed challenges
 - Upload custom photo quizzes
